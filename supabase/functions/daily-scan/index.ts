@@ -381,8 +381,13 @@ Deno.serve(async (req) => {
       else if (job.score <= 6 && job.priority === "HIGH") job.priority = "MEDIUM";
     }
 
-    // 6. Insert new jobs only — skip duplicates entirely
+    // 6. Clean up job links and insert new jobs — skip duplicates entirely
     for (const job of jobs) {
+      // Normalize LinkedIn tracking URLs: /comm/jobs/view/ID → /jobs/view/ID
+      if (job.job_link) {
+        job.job_link = job.job_link.replace(/linkedin\.com\/comm\/jobs/gi, "linkedin.com/jobs");
+      }
+
       const link = job.job_link?.trim().toLowerCase();
       const hasValidLink = link && link.startsWith("http");
       const fingerprint = hasValidLink
