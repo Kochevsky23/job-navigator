@@ -395,7 +395,7 @@ Deno.serve(async (req) => {
         jobs_found: 0,
         jobs_added: 0,
       });
-      return new Response(JSON.stringify({ jobs_found: 0, jobs_added: 0 }), {
+      return new Response(JSON.stringify({ jobs_found: 0, jobs_added: 0, jobs_skipped_duplicate: 0, jobs_skipped_error: 0, skipped_details: [] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
