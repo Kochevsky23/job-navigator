@@ -187,7 +187,7 @@ export default function Dashboard() {
                 className="glass-card glass-hover rounded-xl p-4 min-w-[220px] max-w-[260px] snap-start cursor-pointer flex flex-col gap-3"
               >
                 <div className="flex items-center gap-3">
-                  <CompanyAvatar name={job.company} />
+                  <CompanyLogo name={job.company} domain={(job as any).company_domain} jobLink={job.job_link} />
                   <div className="min-w-0">
                     <p className="font-semibold text-sm truncate" dir="auto">{job.company}</p>
                     <p className="text-xs text-muted-foreground truncate" dir="auto">{job.role}</p>
