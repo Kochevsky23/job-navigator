@@ -98,11 +98,14 @@
   }
   body {
     @apply bg-background text-foreground font-body antialiased;
+    min-height: 100vh;
+  }
+  .dark body,
+  body:is(.dark *) {
     background-image:
       radial-gradient(ellipse 80% 50% at 50% -20%, hsl(255 40% 18% / 0.4), transparent),
       radial-gradient(ellipse 60% 40% at 80% 100%, hsl(214 60% 15% / 0.3), transparent);
     background-attachment: fixed;
-    min-height: 100vh;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-display;
