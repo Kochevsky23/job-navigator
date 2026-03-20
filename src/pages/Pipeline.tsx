@@ -43,7 +43,7 @@ export default function Pipeline() {
     const updateData: Record<string, any> = { status: newStatus };
     if (newStatus === 'Applied') updateData.applied_at = new Date().toISOString();
 
-    const { error } = await supabase.from('jobs').update(updateData).eq('id', jobId);
+    const { error } = await db.from('jobs').update(updateData).eq('id', jobId);
     if (error) {
       toast.error('Failed to update status');
       fetchJobs();
