@@ -170,6 +170,45 @@ export default function ScanSettings() {
     }
   }, [user]);
 
+  const handleAvatarUpload = async (file: File) => {
+    if (!user) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+    setUploadingAvatar(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const filePath = `${user.id}/avatar.${ext}`;
+      
+      // Remove old avatar if exists
+      await supabase.storage.from('avatars').remove([filePath]);
+      
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // Add cache-buster
+      const url = `${publicUrl}?t=${Date.now()}`;
+      
+      await supabase.from('user_profiles').update({
+        avatar_url: url,
+      }).eq('id', user.id);
+
+      setAvatarUrl(url);
+      toast.success('Profile picture updated!');
+    } catch (e: any) {
+      toast.error(e.message || 'Upload failed');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleScan = async () => {
     setScanning(true);
     try {
