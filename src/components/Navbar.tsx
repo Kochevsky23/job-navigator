@@ -13,9 +13,24 @@ const links = [
 ];
 
 export default function Navbar() {
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [initials, setInitials] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      supabase.from('user_profiles').select('avatar_url, full_name').eq('id', user.id).single()
+        .then(({ data }) => {
+          if (data) {
+            setAvatarUrl((data as any).avatar_url || '');
+            const name = (data as any).full_name || '';
+            setInitials(name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase());
+          }
+        });
+    }
+  }, [user]);
 
   const handleLogout = async () => {
     await signOut();
