@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 
 import { format } from 'date-fns';
 import JobDetailPanel from '@/components/JobDetailPanel';
+import CompanyLogo from '@/components/CompanyLogo';
 
 const priorityClass: Record<string, string> = {
   HIGH: 'bg-priority-high priority-high border',
@@ -17,18 +18,6 @@ const priorityClass: Record<string, string> = {
   REJECTED: 'bg-priority-rejected priority-rejected border',
 };
 
-function CompanyAvatar({ name }: { name: string }) {
-  const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const hue = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
-  return (
-    <div
-      className="h-10 w-10 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0"
-      style={{ background: `linear-gradient(135deg, hsl(${hue} 60% 45%), hsl(${(hue + 40) % 360} 70% 55%))` }}
-    >
-      {initials}
-    </div>
-  );
-}
 
 function ScoreBadge({ score }: { score: number }) {
   const cls = score >= 8 ? 'score-pill-high' : score >= 6 ? 'score-pill-medium' : 'score-pill-low';
@@ -198,7 +187,7 @@ export default function Dashboard() {
                 className="glass-card glass-hover rounded-xl p-4 min-w-[220px] max-w-[260px] snap-start cursor-pointer flex flex-col gap-3"
               >
                 <div className="flex items-center gap-3">
-                  <CompanyAvatar name={job.company} />
+                  <CompanyLogo name={job.company} domain={(job as any).company_domain} jobLink={job.job_link} />
                   <div className="min-w-0">
                     <p className="font-semibold text-sm truncate" dir="auto">{job.company}</p>
                     <p className="text-xs text-muted-foreground truncate" dir="auto">{job.role}</p>

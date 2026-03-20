@@ -5,6 +5,7 @@ import { ExternalLink, FileText, Loader2, Download } from 'lucide-react';
 import { useState } from 'react';
 import { generateCV } from '@/lib/api';
 import { toast } from 'sonner';
+import CompanyLogo from '@/components/CompanyLogo';
 
 interface Props {
   job: Job | null;
@@ -20,18 +21,6 @@ const priorityClass: Record<string, string> = {
   REJECTED: 'bg-priority-rejected priority-rejected border',
 };
 
-function CompanyAvatar({ name }: { name: string }) {
-  const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const hue = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
-  return (
-    <div
-      className="h-14 w-14 rounded-2xl flex items-center justify-center text-lg font-bold text-white shrink-0"
-      style={{ background: `linear-gradient(135deg, hsl(${hue} 60% 45%), hsl(${(hue + 40) % 360} 70% 55%))` }}
-    >
-      {initials}
-    </div>
-  );
-}
 
 function CircularScore({ score }: { score: number }) {
   const pct = (score / 10) * 100;
@@ -86,7 +75,7 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
         <div className="p-6 space-y-6">
           <SheetHeader className="space-y-0">
             <div className="flex items-start gap-4">
-              <CompanyAvatar name={job.company} />
+              <CompanyLogo name={job.company} domain={job.company_domain} jobLink={job.job_link} size="lg" />
               <div className="min-w-0 pt-1">
                 <SheetTitle className="font-display text-xl leading-tight">{job.role}</SheetTitle>
                 <p className="text-muted-foreground text-sm mt-0.5">{job.company}</p>

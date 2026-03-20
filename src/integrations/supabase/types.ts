@@ -19,6 +19,7 @@ export type Database = {
           alert_date: string | null
           applied_at: string | null
           company: string
+          company_domain: string | null
           created_at: string
           exp_required: string | null
           fingerprint: string | null
@@ -37,6 +38,7 @@ export type Database = {
           alert_date?: string | null
           applied_at?: string | null
           company?: string
+          company_domain?: string | null
           created_at?: string
           exp_required?: string | null
           fingerprint?: string | null
@@ -55,6 +57,7 @@ export type Database = {
           alert_date?: string | null
           applied_at?: string | null
           company?: string
+          company_domain?: string | null
           created_at?: string
           exp_required?: string | null
           fingerprint?: string | null

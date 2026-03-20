@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Loader2, FileText } from 'lucide-react';
 import JobDetailPanel from '@/components/JobDetailPanel';
+import CompanyLogo from '@/components/CompanyLogo';
 
 const priorityClass: Record<string, string> = {
   HIGH: 'bg-priority-high priority-high border',
@@ -135,7 +136,12 @@ export default function Jobs() {
                   }`}
                   onClick={() => setSelectedJob(job)}
                 >
-                  <TableCell className="font-medium" dir="auto">{job.company}</TableCell>
+                  <TableCell className="font-medium" dir="auto">
+                    <div className="flex items-center gap-2.5">
+                      <CompanyLogo name={job.company} domain={(job as any).company_domain} jobLink={job.job_link} size="sm" />
+                      <span className="truncate">{job.company}</span>
+                    </div>
+                  </TableCell>
                   <TableCell dir="auto">{job.role}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground" dir="auto">{job.location}</TableCell>
                   <TableCell>

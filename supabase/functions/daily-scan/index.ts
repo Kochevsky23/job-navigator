@@ -116,6 +116,7 @@ interface JobFromClaude {
   exp_required: string;
   job_link: string;
   linkedin_id: string;
+  company_domain: string;
   reason: string;
   status: string;
 }
@@ -184,6 +185,12 @@ LINK EXTRACTION RULES (mandatory — every job MUST have at least one link):
 - NEVER store a linkedin.com URL in job_link.
 - Every job MUST have at least one of job_link or linkedin_id filled.
 
+COMPANY DOMAIN (mandatory):
+- company_domain: the company's main website domain (e.g. "google.com", "playtika.com", "tevapharm.com", "siemens-energy.com")
+- If you know the company, provide their actual domain
+- If unsure, guess based on the company name (e.g. "Acme Corp" → "acmecorp.com")
+- Never leave company_domain empty
+
 ===== CANDIDATE CV =====
 ${truncatedCV}
 
@@ -193,7 +200,7 @@ ${emailContent}
 Return ONLY valid JSON with no trailing commas:
 {
   "jobs": [{
-    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "reason": "", "status": "New"
+    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "company_domain": "", "reason": "", "status": "New"
   }]
 }`;
 
@@ -474,6 +481,7 @@ Deno.serve(async (req) => {
         exp_required: job.exp_required,
         job_link: (job.job_link?.trim() && job.job_link.trim().startsWith("http")) ? job.job_link : null,
         linkedin_id: job.linkedin_id || null,
+        company_domain: job.company_domain || null,
         status: job.status || "New",
         fingerprint,
         alert_date: new Date().toISOString(),

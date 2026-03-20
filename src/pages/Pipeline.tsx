@@ -4,6 +4,7 @@ import { Job, JobStatus } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, GripVertical } from 'lucide-react';
+import CompanyLogo from '@/components/CompanyLogo';
 import { toast } from 'sonner';
 
 const COLUMNS: { id: JobStatus; label: string; borderColor: string }[] = [
@@ -108,7 +109,7 @@ export default function Pipeline() {
                                 <div {...provided.dragHandleProps} className="text-muted-foreground/40 hover:text-muted-foreground transition-colors cursor-grab">
                                   <GripVertical className="h-3.5 w-3.5" />
                                 </div>
-                                <div className={`h-2 w-2 rounded-full ${priorityDot[job.priority]} shrink-0`} />
+                                <CompanyLogo name={job.company} domain={(job as any).company_domain} jobLink={job.job_link} size="sm" />
                                 <span className="text-sm font-medium truncate" dir="auto">{job.company}</span>
                               </div>
                               <p className="text-xs text-muted-foreground truncate pl-[22px]" dir="auto">{job.role}</p>
