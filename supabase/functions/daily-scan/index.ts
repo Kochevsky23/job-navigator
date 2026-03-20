@@ -35,16 +35,56 @@ async function fetchJobAlertEmails(accessToken: string): Promise<string[]> {
   const emails: string[] = [];
   for (const msg of listData.messages) {
     const msgResp = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     const msgData = await msgResp.json();
     const subject = msgData.payload?.headers?.find((h: any) => h.name === "Subject")?.value || "";
     const from = msgData.payload?.headers?.find((h: any) => h.name === "From")?.value || "";
-    const snippet = msgData.snippet || "";
-    emails.push(`From: ${from}\nSubject: ${subject}\nSnippet: ${snippet}`);
+    const body = extractEmailBody(msgData.payload);
+    emails.push(`From: ${from}\nSubject: ${subject}\n\n${body}`);
   }
   return emails;
+}
+
+function decodeBase64Url(data: string): string {
+  const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+  try {
+    return atob(base64);
+  } catch {
+    return "";
+  }
+}
+
+function extractEmailBody(payload: any): string {
+  if (!payload) return "";
+
+  // Direct body data on the payload itself
+  if (payload.body?.data) {
+    return decodeBase64Url(payload.body.data);
+  }
+
+  // Multipart: recurse into parts, prefer text/plain then text/html
+  if (payload.parts && payload.parts.length > 0) {
+    let plainText = "";
+    let htmlText = "";
+    for (const part of payload.parts) {
+      if (part.mimeType === "text/plain" && part.body?.data) {
+        plainText = decodeBase64Url(part.body.data);
+      } else if (part.mimeType === "text/html" && part.body?.data) {
+        htmlText = decodeBase64Url(part.body.data);
+      } else if (part.parts) {
+        // Nested multipart (e.g. multipart/alternative inside multipart/mixed)
+        const nested = extractEmailBody(part);
+        if (nested) plainText = plainText || nested;
+      }
+    }
+    // Prefer plain text; fall back to HTML with tags stripped
+    if (plainText) return plainText;
+    if (htmlText) return htmlText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  return "";
 }
 
 async function fetchCVFromDrive(accessToken: string): Promise<string> {
