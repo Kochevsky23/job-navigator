@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Radar, Mail, Brain, FileText, Clock, Upload, User, MapPin, Save, CheckCircle2, AtSign } from 'lucide-react';
+import { Loader2, Radar, Mail, Brain, FileText, Clock, Upload, User, MapPin, Save, CheckCircle2, AtSign, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
@@ -30,6 +30,10 @@ export default function ScanSettings() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -85,6 +89,31 @@ export default function ScanSettings() {
       toast.error(e.message || 'Failed to update email');
     } finally {
       setSavingEmail(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword) return;
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      toast.success('Password updated successfully!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to update password');
+    } finally {
+      setSavingPassword(false);
     }
   };
 
@@ -286,6 +315,46 @@ export default function ScanSettings() {
               </Button>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Password Change */}
+      <Card className="glass-card border-border">
+        <CardHeader>
+          <CardTitle className="font-display flex items-center gap-2">
+            <Lock className="h-5 w-5 text-primary" />
+            Change Password
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">New Password</label>
+            <Input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Enter new password"
+              className="bg-secondary border-[hsl(var(--glass-border)/0.3)]"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Confirm New Password</label>
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm new password"
+              className="bg-secondary border-[hsl(var(--glass-border)/0.3)]"
+            />
+          </div>
+          <Button
+            onClick={handleChangePassword}
+            disabled={savingPassword || !newPassword || !confirmPassword}
+            className="w-full gap-2"
+          >
+            {savingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+            {savingPassword ? 'Updating...' : 'Update Password'}
+          </Button>
         </CardContent>
       </Card>
 
