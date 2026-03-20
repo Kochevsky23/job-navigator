@@ -125,7 +125,7 @@ export default function Dashboard() {
       <div className="flex items-end justify-between animate-fade-up" style={{ animationDelay: '0ms' }}>
         <div>
           <h1 className="text-3xl font-display font-bold tracking-tight" style={{ lineHeight: '1.1' }}>
-            {getGreeting()}, <span className="gradient-text">Dor</span> 👋
+            {getGreeting()}, <span className="gradient-text">{userName || 'there'}</span> 👋
           </h1>
           <p className="text-sm text-muted-foreground mt-1.5">
             {format(new Date(), 'EEEE, MMMM d, yyyy')}
