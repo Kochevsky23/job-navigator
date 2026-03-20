@@ -26,11 +26,13 @@ export default function Navbar() {
 
   useEffect(() => {
     if (user) {
-      supabase.from('user_profiles').select('avatar_url, full_name').eq('id', user.id).single()
+      supabase.from('user_profiles').select('avatar_url, full_name, email').eq('id', user.id).single()
         .then(({ data }) => {
           if (data) {
             setAvatarUrl((data as any).avatar_url || '');
             const name = (data as any).full_name || '';
+            setFullName(name);
+            setEmail((data as any).email || user.email || '');
             setInitials(name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase());
           }
         });
