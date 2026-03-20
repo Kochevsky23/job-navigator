@@ -158,10 +158,11 @@ STEP 5 — Auto-REJECT (score 1, priority REJECTED) if:
 
 For each job provide: company, role, location, job_link, linkedin_id, exp_required, reason.
 
-LINK EXTRACTION RULES (mandatory):
-- job_link: the DIRECT company career page URL (e.g. careers.company.com/job/123, workday.com/..., greenhouse.io/...). If no company URL is found, use empty string "".
+LINK EXTRACTION RULES (mandatory — every job MUST have at least one link):
+- job_link: the DIRECT company career page URL (e.g. careers.company.com/job/123, workday.com/..., greenhouse.io/...). If no company URL is found, set to empty string "".
 - linkedin_id: if a LinkedIn URL exists in the email, extract ONLY the numeric job ID (e.g. "4385024025" from linkedin.com/jobs/view/4385024025). If no LinkedIn URL, use empty string "".
 - NEVER store a linkedin.com URL in job_link. LinkedIn URLs go to linkedin_id as just the number.
+- IMPORTANT: If you cannot find a company career page URL, but you have a LinkedIn job ID, that is fine — just make sure linkedin_id is populated. Every job MUST have at least one of job_link or linkedin_id filled.
 
 REASON FORMAT (mandatory — follow this exactly):
 "Score X — [why this score]. [experience required vs Dor's level as 3rd year IE student]. [specific skills match/mismatch from CV]."
@@ -391,7 +392,6 @@ Deno.serve(async (req) => {
       if (job.job_link) {
         const linkedinMatch = job.job_link.match(/linkedin\.com\/(?:comm\/)?jobs\/view\/(\d+)/i);
         if (linkedinMatch) {
-          // Move LinkedIn ID to linkedin_id field, clear job_link
           if (!job.linkedin_id) job.linkedin_id = linkedinMatch[1];
           job.job_link = "";
         }
@@ -401,6 +401,13 @@ Deno.serve(async (req) => {
       if (job.linkedin_id) {
         const idMatch = job.linkedin_id.match(/(\d+)/);
         job.linkedin_id = idMatch ? idMatch[1] : "";
+      }
+
+      // Fallback: if no job_link and we have linkedin_id, construct LinkedIn URL as job_link
+      // so every job has at least one working link
+      const hasCompanyLink = job.job_link?.trim() && job.job_link.trim().startsWith("http");
+      if (!hasCompanyLink && !job.linkedin_id) {
+        // No link at all — leave as is (rare edge case)
       }
 
       // Build fingerprint
@@ -440,7 +447,7 @@ Deno.serve(async (req) => {
         priority: job.priority,
         reason: job.reason,
         exp_required: job.exp_required,
-        job_link: job.job_link || null,
+        job_link: (job.job_link?.trim() && job.job_link.trim().startsWith("http")) ? job.job_link : null,
         linkedin_id: job.linkedin_id || null,
         status: job.status || "New",
         fingerprint,
@@ -449,7 +456,7 @@ Deno.serve(async (req) => {
 
       // If unique constraint catches it, just skip
       if (insertError) {
-        if (insertError.code === "23505") continue; // unique violation
+        if (insertError.code === "23505") continue;
         console.error("Insert error:", insertError);
       } else {
         jobsAdded++;

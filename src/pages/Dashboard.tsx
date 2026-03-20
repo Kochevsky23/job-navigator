@@ -5,16 +5,25 @@ import { Job, ScanRun } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, AlertTriangle, FileText, Clock, Loader2, Radar } from 'lucide-react';
+import { Briefcase, AlertTriangle, FileText, Clock, Loader2, Radar, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
+import JobDetailPanel from '@/components/JobDetailPanel';
+
+const priorityClass: Record<string, string> = {
+  HIGH: 'bg-priority-high priority-high border',
+  MEDIUM: 'bg-priority-medium priority-medium border',
+  LOW: 'bg-priority-low priority-low border',
+  REJECTED: 'bg-priority-rejected priority-rejected border',
+};
 
 export default function Dashboard() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [scans, setScans] = useState<ScanRun[]>([]);
   const [scanning, setScanning] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
   const fetchData = async () => {
     const [jobsRes, scansRes] = await Promise.all([
@@ -49,6 +58,11 @@ export default function Dashboard() {
   const highPriority = jobs.filter(j => j.priority === 'HIGH').length;
   const cvsGenerated = jobs.filter(j => j.tailored_cv).length;
   const lastScan = scans[0];
+
+  const topJobs = [...todayJobs]
+    .sort((a, b) => b.score - a.score)
+    .filter(j => j.priority !== 'REJECTED')
+    .slice(0, 5);
 
   if (loading) {
     return (
@@ -121,6 +135,39 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {topJobs.length > 0 && (
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="font-display">Best Matches Today</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+              {topJobs.map((job) => (
+                <Card
+                  key={job.id}
+                  className="bg-secondary/30 border-border cursor-pointer hover:bg-secondary/60 transition-colors"
+                  onClick={() => setSelectedJob(job)}
+                >
+                  <CardContent className="p-4 space-y-2">
+                    <p className="font-medium text-sm truncate" dir="auto">{job.company}</p>
+                    <p className="text-xs text-muted-foreground truncate" dir="auto">{job.role}</p>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">
+                        {job.score}/10
+                      </Badge>
+                      <Badge className={`${priorityClass[job.priority]} text-xs`}>{job.priority}</Badge>
+                    </div>
+                    <Button variant="ghost" size="sm" className="w-full mt-1 text-xs gap-1">
+                      View <ArrowRight className="h-3 w-3" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle className="font-display">Recent Scans</CardTitle>
@@ -160,6 +207,16 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      <JobDetailPanel
+        job={selectedJob}
+        open={!!selectedJob}
+        onClose={() => setSelectedJob(null)}
+        onUpdate={() => {
+          fetchData();
+          setSelectedJob(null);
+        }}
+      />
     </div>
   );
 }

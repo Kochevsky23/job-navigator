@@ -69,7 +69,16 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
             </div>
           </div>
 
-          {job.linkedin_id && (
+          {job.job_link && !job.job_link.includes('linkedin.com') ? (
+            <a
+              href={job.job_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center w-full rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+            >
+              <ExternalLink className="h-4 w-4 mr-2" /> View on Company Site
+            </a>
+          ) : job.linkedin_id ? (
             <a
               href={`https://www.linkedin.com/jobs/view/${job.linkedin_id}/`}
               target="_blank"
@@ -78,16 +87,16 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
             >
               <ExternalLink className="h-4 w-4 mr-2" /> View on LinkedIn
             </a>
-          )}
+          ) : null}
 
-          {job.job_link && !job.job_link.includes('linkedin.com') && (
+          {job.job_link && !job.job_link.includes('linkedin.com') && job.linkedin_id && (
             <a
-              href={job.job_link}
+              href={`https://www.linkedin.com/jobs/view/${job.linkedin_id}/`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center w-full rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
             >
-              <ExternalLink className="h-4 w-4 mr-2" /> View Job Posting
+              <ExternalLink className="h-4 w-4 mr-2" /> View on LinkedIn
             </a>
           )}
 
