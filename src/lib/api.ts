@@ -1,13 +1,20 @@
+import { supabase } from '@/integrations/supabase/client';
+
 const CLOUD_URL = import.meta.env.VITE_SUPABASE_URL;
-const CLOUD_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${session?.access_token}`,
+  };
+}
 
 export async function runDailyScan(): Promise<{ jobs_found: number; jobs_added: number }> {
+  const headers = await getAuthHeaders();
   const resp = await fetch(`${CLOUD_URL}/functions/v1/daily-scan`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${CLOUD_KEY}`,
-    },
+    headers,
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ error: 'Scan failed' }));
@@ -17,12 +24,10 @@ export async function runDailyScan(): Promise<{ jobs_found: number; jobs_added: 
 }
 
 export async function generateCV(jobId: string): Promise<{ success: boolean }> {
+  const headers = await getAuthHeaders();
   const resp = await fetch(`${CLOUD_URL}/functions/v1/generate-cv`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${CLOUD_KEY}`,
-    },
+    headers,
     body: JSON.stringify({ jobId }),
   });
   if (!resp.ok) {

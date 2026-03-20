@@ -33,6 +33,7 @@ export type Database = {
           score: number
           status: string
           tailored_cv: string | null
+          user_id: string | null
         }
         Insert: {
           alert_date?: string | null
@@ -52,6 +53,7 @@ export type Database = {
           score?: number
           status?: string
           tailored_cv?: string | null
+          user_id?: string | null
         }
         Update: {
           alert_date?: string | null
@@ -71,6 +73,7 @@ export type Database = {
           score?: number
           status?: string
           tailored_cv?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -82,6 +85,7 @@ export type Database = {
           jobs_found: number
           started_at: string
           success: boolean
+          user_id: string | null
         }
         Insert: {
           error_text?: string | null
@@ -90,6 +94,7 @@ export type Database = {
           jobs_found?: number
           started_at?: string
           success?: boolean
+          user_id?: string | null
         }
         Update: {
           error_text?: string | null
@@ -98,6 +103,40 @@ export type Database = {
           jobs_found?: number
           started_at?: string
           success?: boolean
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      user_profiles: {
+        Row: {
+          city: string | null
+          created_at: string | null
+          cv_filename: string | null
+          cv_text: string | null
+          cv_uploaded_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string | null
+          cv_filename?: string | null
+          cv_text?: string | null
+          cv_uploaded_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string | null
+          cv_filename?: string | null
+          cv_text?: string | null
+          cv_uploaded_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
         }
         Relationships: []
       }

@@ -336,23 +336,43 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Use Cloud Supabase (auto-set env vars)
   const supabase = createClient(
-    Deno.env.get("EXTERNAL_SUPABASE_URL")!,
-    Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+
+  // Extract user from JWT
+  const authHeader = req.headers.get("Authorization") || "";
+  const token = authHeader.replace("Bearer ", "");
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  const userId = user.id;
+
+  // Fetch user's profile for CV text
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("cv_text, full_name, city")
+    .eq("id", userId)
+    .single();
 
   let jobsFound = 0;
   let jobsAdded = 0;
 
   try {
-    // 1. Get Google access token
+    // 1. Get Google access token (shared credentials)
     const accessToken = await getGoogleAccessToken();
 
     // 2. Fetch emails
     const emails = await fetchJobAlertEmails(accessToken);
     if (emails.length === 0) {
-      // No emails, save scan and return
       await supabase.from("scan_runs").insert({
+        user_id: userId,
         success: true,
         jobs_found: 0,
         jobs_added: 0,
@@ -362,8 +382,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 3. Fetch CV from Drive
-    const cvText = await fetchCVFromDrive(accessToken);
+    // 3. Get CV text — prefer user's stored CV, fallback to Google Drive
+    let cvText = profile?.cv_text || "";
+    if (!cvText) {
+      cvText = await fetchCVFromDrive(accessToken);
+    }
 
     // 4. Analyze with Claude
     const jobs = await analyzeWithClaude(emails, cvText);
@@ -472,6 +495,7 @@ Deno.serve(async (req) => {
 
       // New job — insert
       const { error: insertError } = await supabase.from("jobs").insert({
+        user_id: userId,
         company: job.company,
         role: job.role,
         location: job.location,
@@ -500,6 +524,7 @@ Deno.serve(async (req) => {
     const { data: highScoreJobs } = await supabase
       .from("jobs")
       .select("*")
+      .eq("user_id", userId)
       .gt("score", 6)
       .is("tailored_cv", null)
       .neq("priority", "REJECTED");
@@ -521,6 +546,7 @@ Deno.serve(async (req) => {
 
     // 7. Save scan result
     await supabase.from("scan_runs").insert({
+      user_id: userId,
       success: true,
       jobs_found: jobsFound,
       jobs_added: jobsAdded,
@@ -532,6 +558,7 @@ Deno.serve(async (req) => {
   } catch (error: any) {
     console.error("Scan error:", error);
     await supabase.from("scan_runs").insert({
+      user_id: userId,
       success: false,
       jobs_found: jobsFound,
       jobs_added: jobsAdded,
