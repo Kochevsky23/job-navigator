@@ -77,7 +77,14 @@ export default function Dashboard() {
     setScanning(true);
     try {
       const result = await runDailyScan();
-      toast.success(`Scan complete! Found ${result.jobs_found} jobs, added ${result.jobs_added} new.`);
+      const skipped = (result.jobs_skipped_duplicate || 0) + (result.jobs_skipped_error || 0);
+      let msg = `Found ${result.jobs_found} jobs, added ${result.jobs_added} new.`;
+      if (skipped > 0) {
+        msg += ` Skipped ${skipped} (${result.jobs_skipped_duplicate || 0} duplicates`;
+        if (result.jobs_skipped_error) msg += `, ${result.jobs_skipped_error} errors`;
+        msg += `)`;
+      }
+      toast.success(msg);
       fetchData();
     } catch (e: any) {
       toast.error(e.message || 'Scan failed');
