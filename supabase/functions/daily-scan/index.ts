@@ -380,6 +380,7 @@ Deno.serve(async (req) => {
 
   let jobsFound = 0;
   let jobsAdded = 0;
+  const skippedDetails: { company: string; role: string; reason: string }[] = [];
 
   try {
     // 1. Get Google access token (shared credentials)
@@ -394,7 +395,7 @@ Deno.serve(async (req) => {
         jobs_found: 0,
         jobs_added: 0,
       });
-      return new Response(JSON.stringify({ jobs_found: 0, jobs_added: 0 }), {
+      return new Response(JSON.stringify({ jobs_found: 0, jobs_added: 0, jobs_skipped_duplicate: 0, jobs_skipped_error: 0, skipped_details: [] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -497,7 +498,11 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      if (existing) continue;
+      if (existing) {
+        console.log(`SKIP duplicate fingerprint: ${job.company} — ${job.role} (fp: ${fingerprint})`);
+        skippedDetails.push({ company: job.company, role: job.role, reason: "duplicate_fingerprint" });
+        continue;
+      }
 
       // Also check by company + role to catch near-duplicates
       const { data: byCompanyRole } = await supabase
@@ -508,7 +513,11 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      if (byCompanyRole) continue;
+      if (byCompanyRole) {
+        console.log(`SKIP duplicate company+role: ${job.company} — ${job.role}`);
+        skippedDetails.push({ company: job.company, role: job.role, reason: "duplicate_company_role" });
+        continue;
+      }
 
       // New job — insert
       const { error: insertError } = await supabase.from("jobs").insert({
@@ -528,10 +537,14 @@ Deno.serve(async (req) => {
         alert_date: new Date().toISOString(),
       });
 
-      // If unique constraint catches it, just skip
       if (insertError) {
-        if (insertError.code === "23505") continue;
-        console.error("Insert error:", insertError);
+        if (insertError.code === "23505") {
+          console.log(`SKIP unique constraint: ${job.company} — ${job.role}`);
+          skippedDetails.push({ company: job.company, role: job.role, reason: "duplicate_constraint" });
+        } else {
+          console.error(`SKIP insert error: ${job.company} — ${job.role}:`, insertError);
+          skippedDetails.push({ company: job.company, role: job.role, reason: `error: ${insertError.message}` });
+        }
       } else {
         jobsAdded++;
       }
@@ -569,7 +582,21 @@ Deno.serve(async (req) => {
       jobs_added: jobsAdded,
     });
 
-    return new Response(JSON.stringify({ jobs_found: jobsFound, jobs_added: jobsAdded }), {
+    const skipDuplicate = skippedDetails.filter(s => s.reason.startsWith("duplicate")).length;
+    const skipError = skippedDetails.filter(s => s.reason.startsWith("error")).length;
+
+    console.log(`Scan complete: found=${jobsFound}, added=${jobsAdded}, skipped_duplicate=${skipDuplicate}, skipped_error=${skipError}`);
+    for (const s of skippedDetails) {
+      console.log(`  Skipped: ${s.company} — ${s.role} [${s.reason}]`);
+    }
+
+    return new Response(JSON.stringify({
+      jobs_found: jobsFound,
+      jobs_added: jobsAdded,
+      jobs_skipped_duplicate: skipDuplicate,
+      jobs_skipped_error: skipError,
+      skipped_details: skippedDetails,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
