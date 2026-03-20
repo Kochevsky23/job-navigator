@@ -1,7 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut, Menu, X, User } from 'lucide-react';
+import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut, Menu, X, User, Sun, Moon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useEffect } from 'react';
+import { useTheme } from 'next-themes';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -16,6 +17,7 @@ const links = [
 export default function Navbar() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState('');
   const [initials, setInitials] = useState('');
@@ -37,6 +39,8 @@ export default function Navbar() {
     await signOut();
     navigate('/login');
   };
+
+  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
 
   return (
     <nav className="sticky top-0 z-50 glass border-b-0 border-t-0 border-x-0 border-b border-[hsl(var(--glass-border)/0.3)]">
@@ -66,7 +70,7 @@ export default function Navbar() {
               {label}
             </NavLink>
           ))}
-          <div className="ml-2 pl-2 border-l border-[hsl(var(--glass-border)/0.3)]">
+          <div className="ml-2 pl-2 border-l border-[hsl(var(--glass-border)/0.3)] flex items-center gap-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="rounded-full transition-opacity hover:opacity-80 active:scale-95 outline-none">
@@ -82,6 +86,10 @@ export default function Navbar() {
                 <DropdownMenuItem onClick={() => navigate('/settings')} className="cursor-pointer gap-2">
                   <Settings className="h-4 w-4" />
                   Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer gap-2">
+                  {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="cursor-pointer gap-2 text-destructive focus:text-destructive">
@@ -122,6 +130,13 @@ export default function Navbar() {
               {label}
             </NavLink>
           ))}
+          <button
+            onClick={() => { setMobileOpen(false); toggleTheme(); }}
+            className="flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--glass-border)/0.3)] transition-all duration-200 w-full"
+          >
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+          </button>
           <button
             onClick={() => { setMobileOpen(false); handleLogout(); }}
             className="flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200 w-full"
