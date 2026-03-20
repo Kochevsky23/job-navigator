@@ -21,6 +21,7 @@ export default function ScanSettings() {
   const [loading, setLoading] = useState(true);
 
   // Profile state
+  const [fullName, setFullName] = useState('');
   const [city, setCity] = useState('');
   const [cvText, setCvText] = useState('');
   const [cvFilename, setCvFilename] = useState('');
