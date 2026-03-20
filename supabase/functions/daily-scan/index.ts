@@ -558,6 +558,7 @@ Deno.serve(async (req) => {
   } catch (error: any) {
     console.error("Scan error:", error);
     await supabase.from("scan_runs").insert({
+      user_id: userId,
       success: false,
       jobs_found: jobsFound,
       jobs_added: jobsAdded,
