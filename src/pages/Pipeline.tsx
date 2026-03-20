@@ -4,6 +4,7 @@ import { Job, JobStatus } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, GripVertical } from 'lucide-react';
+import CompanyLogo from '@/components/CompanyLogo';
 import { toast } from 'sonner';
 
 const COLUMNS: { id: JobStatus; label: string; borderColor: string }[] = [
