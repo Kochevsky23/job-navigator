@@ -546,6 +546,7 @@ Deno.serve(async (req) => {
 
     // 7. Save scan result
     await supabase.from("scan_runs").insert({
+      user_id: userId,
       success: true,
       jobs_found: jobsFound,
       jobs_added: jobsAdded,
