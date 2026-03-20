@@ -115,6 +115,7 @@ interface JobFromClaude {
   priority: string;
   exp_required: string;
   job_link: string;
+  linkedin_id: string;
   reason: string;
   status: string;
 }
