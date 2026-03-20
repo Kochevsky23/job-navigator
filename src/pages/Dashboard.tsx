@@ -67,7 +67,7 @@ export default function Dashboard() {
         </div>
         <Button onClick={handleScan} disabled={scanning} size="lg" className="gap-2">
           {scanning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Radar className="h-5 w-5" />}
-          {scanning ? 'Scanning...' : 'Run Daily Scan'}
+          {scanning ? 'Scanning...' : 'Find New Jobs'}
         </Button>
       </div>
 
