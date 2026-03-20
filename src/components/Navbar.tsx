@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const links = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -65,22 +66,30 @@ export default function Navbar() {
               {label}
             </NavLink>
           ))}
-          <div className="flex items-center gap-2 ml-2 pl-2 border-l border-[hsl(var(--glass-border)/0.3)]">
-            <NavLink to="/settings" className="rounded-full transition-opacity hover:opacity-80 active:scale-95">
-              <Avatar className="h-7 w-7 cursor-pointer">
-                {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile" />}
-                <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
-                  {initials || <User className="h-3.5 w-3.5" />}
-                </AvatarFallback>
-              </Avatar>
-            </NavLink>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </button>
+          <div className="ml-2 pl-2 border-l border-[hsl(var(--glass-border)/0.3)]">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="rounded-full transition-opacity hover:opacity-80 active:scale-95 outline-none">
+                  <Avatar className="h-8 w-8 cursor-pointer">
+                    {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile" />}
+                    <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
+                      {initials || <User className="h-3.5 w-3.5" />}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={() => navigate('/settings')} className="cursor-pointer gap-2">
+                  <Settings className="h-4 w-4" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer gap-2 text-destructive focus:text-destructive">
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
