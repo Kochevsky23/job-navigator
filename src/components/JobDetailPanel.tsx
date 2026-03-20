@@ -1,7 +1,7 @@
 import { Job } from '@/types/database';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, FileText, Loader2, Download, CheckCircle2, Send } from 'lucide-react';
+import { ExternalLink, FileText, Loader2, Download, CheckCircle2, Send, StickyNote, CalendarClock, Save } from 'lucide-react';
 import { useState } from 'react';
 import { generateCV } from '@/lib/api';
 import { db } from '@/lib/supabase-external';
