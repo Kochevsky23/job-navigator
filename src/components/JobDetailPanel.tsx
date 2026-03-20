@@ -69,7 +69,18 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
             </div>
           </div>
 
-          {job.job_link && (
+          {job.linkedin_id && (
+            <a
+              href={`https://www.linkedin.com/jobs/view/${job.linkedin_id}/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center w-full rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+            >
+              <ExternalLink className="h-4 w-4 mr-2" /> View on LinkedIn
+            </a>
+          )}
+
+          {job.job_link && !job.job_link.includes('linkedin.com') && (
             <a
               href={job.job_link}
               target="_blank"
