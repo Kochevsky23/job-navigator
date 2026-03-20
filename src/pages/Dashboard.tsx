@@ -218,49 +218,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Recent Scans */}
-      <div className="animate-fade-up" style={{ animationDelay: '500ms' }}>
-        <h2 className="text-lg font-display font-semibold mb-4">Recent Scans</h2>
-        <div className="glass-card rounded-xl overflow-hidden">
-          {scans.length === 0 ? (
-            <p className="text-muted-foreground text-sm p-6">No scan history yet. Run your first scan!</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b border-[hsl(var(--glass-border)/0.3)]">
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Time</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Found</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Added</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Error</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {scans.map((s) => (
-                  <TableRow key={s.id} className="border-b border-[hsl(var(--glass-border)/0.2)] hover:bg-[hsl(var(--glass-border)/0.15)] transition-colors">
-                    <TableCell className="text-sm">{format(new Date(s.started_at), 'MMM d, HH:mm')}</TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                        s.success
-                          ? 'bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]'
-                          : 'bg-[hsl(var(--destructive)/0.12)] text-destructive'
-                      }`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${s.success ? 'bg-[hsl(var(--success))]' : 'bg-destructive'}`} />
-                        {s.success ? 'Success' : 'Failed'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="tabular-nums">{s.jobs_found}</TableCell>
-                    <TableCell className="tabular-nums">{s.jobs_added}</TableCell>
-                    <TableCell className="text-xs text-destructive max-w-[200px] truncate">
-                      {s.error_text || '—'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </div>
-      </div>
 
       <JobDetailPanel
         job={selectedJob}
