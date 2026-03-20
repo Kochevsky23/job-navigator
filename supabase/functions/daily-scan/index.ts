@@ -156,14 +156,17 @@ STEP 5 — Auto-REJECT (score 1, priority REJECTED) if:
 - Requires 3+ years experience
 - Completely unrelated to data/analytics/operations/IE/business analysis/project management
 
-For each job provide: company, role, location, job_link (use the BASE URL only — remove all tracking parameters like trackingId, refId, lipi, midToken, trk etc. If no clean URL exists, use empty string), exp_required, reason.
+For each job provide: company, role, location, job_link, linkedin_id, exp_required, reason.
+
+LINK EXTRACTION RULES (mandatory):
+- job_link: the DIRECT company career page URL (e.g. careers.company.com/job/123, workday.com/..., greenhouse.io/...). If no company URL is found, use empty string "".
+- linkedin_id: if a LinkedIn URL exists in the email, extract ONLY the numeric job ID (e.g. "4385024025" from linkedin.com/jobs/view/4385024025). If no LinkedIn URL, use empty string "".
+- NEVER store a linkedin.com URL in job_link. LinkedIn URLs go to linkedin_id as just the number.
 
 REASON FORMAT (mandatory — follow this exactly):
 "Score X — [why this score]. [experience required vs Dor's level as 3rd year IE student]. [specific skills match/mismatch from CV]."
 Example good reason: "Score 7 — entry-level data analyst, 0-1yr exp fits Dor's student status. Requires SQL and Excel which Dor has. Operations focus matches IE background."
 Example bad reason: "Good fit for candidate" — NEVER write vague reasons like this.
-
-Keep job_link URLs short (base URL only, no tracking params).
 
 ===== CANDIDATE CV =====
 ${truncatedCV}
@@ -174,7 +177,7 @@ ${emailContent}
 Return ONLY valid JSON with no trailing commas:
 {
   "jobs": [{
-    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "reason": "", "status": "New"
+    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "reason": "", "status": "New"
   }]
 }`;
 
