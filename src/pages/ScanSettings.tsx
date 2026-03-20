@@ -318,6 +318,46 @@ export default function ScanSettings() {
         </CardContent>
       </Card>
 
+      {/* Password Change */}
+      <Card className="glass-card border-border">
+        <CardHeader>
+          <CardTitle className="font-display flex items-center gap-2">
+            <Lock className="h-5 w-5 text-primary" />
+            Change Password
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">New Password</label>
+            <Input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Enter new password"
+              className="bg-secondary border-[hsl(var(--glass-border)/0.3)]"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Confirm New Password</label>
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm new password"
+              className="bg-secondary border-[hsl(var(--glass-border)/0.3)]"
+            />
+          </div>
+          <Button
+            onClick={handleChangePassword}
+            disabled={savingPassword || !newPassword || !confirmPassword}
+            className="w-full gap-2"
+          >
+            {savingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+            {savingPassword ? 'Updating...' : 'Update Password'}
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Scan Configuration */}
       <Card className="glass-card border-border">
         <CardHeader>
