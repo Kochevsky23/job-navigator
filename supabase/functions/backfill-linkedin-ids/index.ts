@@ -13,16 +13,23 @@ Deno.serve(async (req) => {
     Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const { data: all } = await supabase.from("jobs").select("company, role, job_link, linkedin_id").limit(30);
+  // Get all jobs, check fingerprints for linkedin job IDs
+  const { data: all } = await supabase.from("jobs").select("id, company, fingerprint, linkedin_id").order("created_at", { ascending: false });
 
-  const withLinks = (all || []).filter(j => j.job_link && j.job_link.trim() !== "");
-  const linkedinInJobLink = withLinks.filter(j => j.job_link.includes("linkedin"));
+  let fixed = 0;
+  for (const job of all || []) {
+    if (job.linkedin_id) continue; // already has one
+    if (!job.fingerprint) continue;
 
-  return new Response(JSON.stringify({
-    total_jobs: all?.length,
-    with_job_link: withLinks.length,
-    linkedin_in_job_link: linkedinInJobLink.map(j => ({ company: j.company, job_link: j.job_link })),
-    sample_links: withLinks.slice(0, 5).map(j => ({ company: j.company, job_link: j.job_link, linkedin_id: j.linkedin_id })),
-    with_linkedin_id: (all || []).filter(j => j.linkedin_id).map(j => ({ company: j.company, linkedin_id: j.linkedin_id })),
-  }, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // fingerprints like "link::https://www.linkedin.com/jobs/view/4382799156/"
+    const match = job.fingerprint.match(/linkedin\.com\/jobs\/view\/(\d+)/i);
+    if (match) {
+      await supabase.from("jobs").update({ linkedin_id: match[1] }).eq("id", job.id);
+      fixed++;
+    }
+  }
+
+  return new Response(JSON.stringify({ total: all?.length, fixed }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 });
