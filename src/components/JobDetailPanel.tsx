@@ -70,10 +70,12 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
           </div>
 
           {job.job_link && (
-            <Button variant="outline" className="w-full" asChild>
-              <a href={job.job_link} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4 mr-2" /> View Job Posting
-              </a>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => window.open(job.job_link!, '_blank', 'noopener,noreferrer')}
+            >
+              <ExternalLink className="h-4 w-4 mr-2" /> View Job Posting
             </Button>
           )}
 
