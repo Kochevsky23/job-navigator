@@ -75,7 +75,7 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
         <div className="p-6 space-y-6">
           <SheetHeader className="space-y-0">
             <div className="flex items-start gap-4">
-              <CompanyAvatar name={job.company} />
+              <CompanyLogo name={job.company} domain={job.company_domain} jobLink={job.job_link} size="lg" />
               <div className="min-w-0 pt-1">
                 <SheetTitle className="font-display text-xl leading-tight">{job.role}</SheetTitle>
                 <p className="text-muted-foreground text-sm mt-0.5">{job.company}</p>
