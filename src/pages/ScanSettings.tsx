@@ -28,6 +28,8 @@ export default function ScanSettings() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
 
   const fetchProfile = async () => {
     if (!user) return;
