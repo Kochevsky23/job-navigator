@@ -21,6 +21,7 @@ export default function ScanSettings() {
   const [loading, setLoading] = useState(true);
 
   // Profile state
+  const [fullName, setFullName] = useState('');
   const [city, setCity] = useState('');
   const [cvText, setCvText] = useState('');
   const [cvFilename, setCvFilename] = useState('');
@@ -32,6 +33,7 @@ export default function ScanSettings() {
     if (!user) return;
     const { data } = await supabase.from('user_profiles').select('*').eq('id', user.id).single();
     if (data) {
+      setFullName((data as any).full_name || '');
       setCity((data as any).city || '');
       setCvText((data as any).cv_text || '');
       setCvFilename((data as any).cv_filename || '');
@@ -55,6 +57,7 @@ export default function ScanSettings() {
     setSaving(true);
     try {
       const { error } = await supabase.from('user_profiles').update({
+        full_name: fullName,
         city,
         cv_text: cvText,
       }).eq('id', user.id);
@@ -149,6 +152,21 @@ export default function ScanSettings() {
             </div>
           ) : (
             <>
+              {/* Full Name */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  Full Name
+                </label>
+                <Input
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. John Smith"
+                  className="bg-secondary border-[hsl(var(--glass-border)/0.3)]"
+                />
+                <p className="text-xs text-muted-foreground">Shown in your dashboard greeting</p>
+              </div>
+
               {/* City */}
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-1.5">
