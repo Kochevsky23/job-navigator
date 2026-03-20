@@ -1,7 +1,9 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut, Menu, X } from 'lucide-react';
+import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut, Menu, X, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 const links = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
