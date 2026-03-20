@@ -495,6 +495,7 @@ Deno.serve(async (req) => {
 
       // New job — insert
       const { error: insertError } = await supabase.from("jobs").insert({
+        user_id: userId,
         company: job.company,
         role: job.role,
         location: job.location,
