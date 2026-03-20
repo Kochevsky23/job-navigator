@@ -45,6 +45,7 @@ export default function ScanSettings() {
       setCity((data as any).city || '');
       setCvText((data as any).cv_text || '');
       setCvFilename((data as any).cv_filename || '');
+      setAvatarUrl((data as any).avatar_url || '');
     }
     setEmail(user?.email || '');
     setProfileLoading(false);
