@@ -197,7 +197,7 @@ ${truncatedCV}
 ===== RECENT JOB ALERT EMAILS =====
 ${emailContent}
 
-Return ONLY valid JSON with no trailing commas:
+Return ONLY valid JSON with no trailing commas. Use only ASCII characters in all string values (no Hebrew, no special quotes, no newlines inside strings):
 {
   "jobs": [{
     "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "company_domain": "", "reason": "", "status": "New"
@@ -239,33 +239,50 @@ Return ONLY valid JSON with no trailing commas:
   
   // Clean common JSON issues: trailing commas before ] or }
   jsonStr = jsonStr.replace(/,\s*([}\]])/g, "$1");
+  // Remove control characters that break JSON (keep spaces)
+  jsonStr = jsonStr.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
   
   let parsed: any;
   try {
     parsed = JSON.parse(jsonStr);
   } catch (e: any) {
-    // Response was likely truncated — try to salvage by finding the last complete job object
-    console.error("JSON parse failed, attempting salvage. Error:", e.message);
+    console.error("JSON parse failed, attempting regex extraction. Error:", e.message);
     
-    // Find the last complete "}" before the truncation point
-    const lastCompleteObj = jsonStr.lastIndexOf('"status": "New"');
-    if (lastCompleteObj > 0) {
-      // Find the closing brace of that object
-      const closingBrace = jsonStr.indexOf("}", lastCompleteObj);
-      if (closingBrace > 0) {
-        const salvaged = jsonStr.substring(0, closingBrace + 1) + "]}";
-        try {
-          parsed = JSON.parse(salvaged.replace(/,\s*([}\]])/g, "$1"));
-          console.log(`Salvaged ${parsed.jobs?.length || 0} jobs from truncated response`);
-        } catch {
-          // Last resort: try to extract individual job objects
-          console.error("Salvage also failed");
-          throw new Error("Failed to parse Claude JSON: " + e.message);
-        }
-      } else {
-        throw new Error("Failed to parse Claude JSON: " + e.message);
+    try {
+      // Extract individual job objects using regex
+      const jobMatches: any[] = [];
+      const jobRegex = /"company"\s*:\s*"([^"]*)"\s*,\s*"role"\s*:\s*"([^"]*)"\s*,\s*"location"\s*:\s*"([^"]*)"\s*,\s*"score"\s*:\s*(\d+)\s*,\s*"priority"\s*:\s*"([^"]*)"\s*,\s*"exp_required"\s*:\s*"([^"]*)"\s*,\s*"job_link"\s*:\s*"([^"]*)"\s*,\s*"linkedin_id"\s*:\s*"([^"]*)"\s*,\s*"company_domain"\s*:\s*"([^"]*)"\s*,\s*"reason"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"status"\s*:\s*"([^"]*)"/g;
+      
+      let match;
+      while ((match = jobRegex.exec(jsonStr)) !== null) {
+        jobMatches.push({
+          company: match[1], role: match[2], location: match[3],
+          score: parseInt(match[4]), priority: match[5], exp_required: match[6],
+          job_link: match[7], linkedin_id: match[8], company_domain: match[9],
+          reason: match[10], status: match[11]
+        });
       }
-    } else {
+      
+      if (jobMatches.length > 0) {
+        parsed = { jobs: jobMatches };
+        console.log(`Regex-extracted ${jobMatches.length} jobs from malformed JSON`);
+      } else {
+        // Fallback: truncation salvage
+        const lastComplete = jsonStr.lastIndexOf('"status"');
+        if (lastComplete > 0) {
+          const closingBrace = jsonStr.indexOf("}", lastComplete);
+          if (closingBrace > 0) {
+            const salvaged = jsonStr.substring(0, closingBrace + 1) + "]}";
+            parsed = JSON.parse(salvaged.replace(/,\s*([}\]])/g, "$1"));
+            console.log(`Salvaged ${parsed.jobs?.length || 0} jobs`);
+          } else {
+            throw e;
+          }
+        } else {
+          throw e;
+        }
+      }
+    } catch {
       throw new Error("Failed to parse Claude JSON: " + e.message);
     }
   }
