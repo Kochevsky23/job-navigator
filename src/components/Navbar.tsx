@@ -1,5 +1,6 @@
-import { NavLink } from 'react-router-dom';
-import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 const links = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -9,6 +10,14 @@ const links = [
 ];
 
 export default function Navbar() {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/login');
+  };
+
   return (
     <nav className="sticky top-0 z-50 glass border-b-0 border-t-0 border-x-0 border-b border-[hsl(var(--glass-border)/0.3)]">
       <div className="container flex h-14 items-center gap-6">
@@ -35,6 +44,14 @@ export default function Navbar() {
               <span className="hidden sm:inline">{label}</span>
             </NavLink>
           ))}
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200 ml-1"
+            title="Sign out"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Logout</span>
+          </button>
         </div>
       </div>
     </nav>
