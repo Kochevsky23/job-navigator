@@ -336,23 +336,43 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Use Cloud Supabase (auto-set env vars)
   const supabase = createClient(
-    Deno.env.get("EXTERNAL_SUPABASE_URL")!,
-    Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+
+  // Extract user from JWT
+  const authHeader = req.headers.get("Authorization") || "";
+  const token = authHeader.replace("Bearer ", "");
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  const userId = user.id;
+
+  // Fetch user's profile for CV text
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("cv_text, full_name, city")
+    .eq("id", userId)
+    .single();
 
   let jobsFound = 0;
   let jobsAdded = 0;
 
   try {
-    // 1. Get Google access token
+    // 1. Get Google access token (shared credentials)
     const accessToken = await getGoogleAccessToken();
 
     // 2. Fetch emails
     const emails = await fetchJobAlertEmails(accessToken);
     if (emails.length === 0) {
-      // No emails, save scan and return
       await supabase.from("scan_runs").insert({
+        user_id: userId,
         success: true,
         jobs_found: 0,
         jobs_added: 0,
@@ -362,7 +382,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 3. Fetch CV from Drive
+    // 3. Get CV text — prefer user's stored CV, fallback to Google Drive
     const cvText = await fetchCVFromDrive(accessToken);
 
     // 4. Analyze with Claude
