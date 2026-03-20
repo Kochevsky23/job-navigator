@@ -141,7 +141,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {stats.map((s, i) => (
           <div
             key={s.label}
@@ -155,30 +155,35 @@ export default function Dashboard() {
             <p className="text-3xl font-display font-bold tabular-nums">{s.value}</p>
           </div>
         ))}
-        <div
-          className="glass-card rounded-xl p-5 border-b-2 border-b-muted-foreground/30 animate-fade-up"
-          style={{ animationDelay: '320ms' }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Last Scan</span>
-            <Clock className="h-4 w-4 text-muted-foreground opacity-60" />
+      </div>
+
+      {/* Last Scan Status */}
+      <div className="animate-fade-up" style={{ animationDelay: '320ms' }}>
+        {lastScan ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            {lastScan.success ? (
+              <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))] shrink-0" />
+            ) : (
+              <XCircle className="h-4 w-4 text-destructive shrink-0" />
+            )}
+            <span>
+              Last scan: {format(new Date(lastScan.started_at), 'MMM d') === format(new Date(), 'MMM d')
+                ? `Today at ${format(new Date(lastScan.started_at), 'HH:mm')}`
+                : format(new Date(lastScan.started_at), 'MMM d \'at\' HH:mm')}
+            </span>
+            {lastScan.success && lastScan.jobs_added > 0 && (
+              <span className="text-[hsl(var(--success))] font-medium">+ {lastScan.jobs_added} new jobs</span>
+            )}
+            {lastScan.success && lastScan.jobs_added === 0 && (
+              <span className="text-muted-foreground">· no new jobs</span>
+            )}
+            {!lastScan.success && (
+              <span className="text-destructive font-medium">· failed</span>
+            )}
           </div>
-          {lastScan ? (
-            <div>
-              <p className="text-sm font-semibold">
-                {format(new Date(lastScan.started_at), 'MMM d, HH:mm')}
-              </p>
-              <Badge
-                variant={lastScan.success ? 'default' : 'destructive'}
-                className="mt-1.5 text-xs"
-              >
-                {lastScan.success ? 'Success' : 'Failed'}
-              </Badge>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No scans yet</p>
-          )}
-        </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No scans yet. Run your first scan!</p>
+        )}
       </div>
 
       {/* Best Matches */}
