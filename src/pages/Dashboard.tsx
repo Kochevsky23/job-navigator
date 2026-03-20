@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { runDailyScan } from '@/lib/api';
 import { Job, ScanRun } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,8 +21,8 @@ export default function Dashboard() {
       supabase.from('jobs').select('*'),
       supabase.from('scan_runs').select('*').order('started_at', { ascending: false }).limit(7),
     ]);
-    if (jobsRes.data) setJobs(jobsRes.data);
-    if (scansRes.data) setScans(scansRes.data);
+    if (jobsRes.data) setJobs(jobsRes.data as unknown as Job[]);
+    if (scansRes.data) setScans(scansRes.data as unknown as ScanRun[]);
     setLoading(false);
   };
 

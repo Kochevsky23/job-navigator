@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { Job, JobStatus } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +27,7 @@ export default function Pipeline() {
 
   const fetchJobs = async () => {
     const { data } = await supabase.from('jobs').select('*').order('score', { ascending: false });
-    if (data) setJobs(data);
+    if (data) setJobs(data as unknown as Job[]);
     setLoading(false);
   };
 
