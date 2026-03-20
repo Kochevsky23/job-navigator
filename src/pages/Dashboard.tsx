@@ -5,7 +5,7 @@ import { db } from '@/lib/supabase-external';
 import { runDailyScan } from '@/lib/api';
 import { Job, ScanRun } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, AlertTriangle, FileText, Loader2, Radar, ArrowRight, CheckCircle2, XCircle, Send, BarChart3 } from 'lucide-react';
+import { Briefcase, AlertTriangle, FileText, Loader2, Radar, ArrowRight, CheckCircle2, XCircle, Send, BarChart3, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -52,6 +52,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [userName, setUserName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
 
   const fetchData = async () => {
     const [jobsRes, scansRes] = await Promise.all([
@@ -66,9 +67,12 @@ export default function Dashboard() {
   useEffect(() => {
     fetchData();
     if (user) {
-      supabase.from('user_profiles').select('full_name').eq('id', user.id).single()
+      supabase.from('user_profiles').select('full_name, avatar_url').eq('id', user.id).single()
         .then(({ data }) => {
-          if (data) setUserName((data as any).full_name?.split(' ')[0] || '');
+          if (data) {
+            setUserName((data as any).full_name?.split(' ')[0] || '');
+            setAvatarUrl((data as any).avatar_url || '');
+          }
         });
     }
   }, [user]);
@@ -150,13 +154,22 @@ export default function Dashboard() {
     <div className="container py-6 md:py-8 space-y-6 md:space-y-8">
       {/* Hero */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 animate-fade-up" style={{ animationDelay: '0ms' }}>
-        <div>
-          <h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight" style={{ lineHeight: '1.1' }}>
-            {getGreeting()}, <span className="gradient-text">{userName || 'there'}</span> 👋
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1.5">
-            {format(new Date(), 'EEEE, MMMM d, yyyy')}
-          </p>
+        <div className="flex items-center gap-4">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="Profile" className="h-12 w-12 md:h-14 md:w-14 rounded-full object-cover border-2 border-[hsl(var(--glass-border)/0.4)] shrink-0" />
+          ) : (
+            <div className="h-12 w-12 md:h-14 md:w-14 rounded-full bg-primary/10 flex items-center justify-center border-2 border-[hsl(var(--glass-border)/0.4)] shrink-0">
+              <User className="h-6 w-6 text-primary/50" />
+            </div>
+          )}
+          <div>
+            <h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight" style={{ lineHeight: '1.1' }}>
+              {getGreeting()}, <span className="gradient-text">{userName || 'there'}</span> 👋
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1.5">
+              {format(new Date(), 'EEEE, MMMM d, yyyy')}
+            </p>
+          </div>
         </div>
         <button
           onClick={handleScan}
