@@ -1,7 +1,7 @@
 import { Job } from '@/types/database';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, FileText, Loader2, Download, CheckCircle2, Send } from 'lucide-react';
+import { ExternalLink, FileText, Loader2, Download, CheckCircle2, Send, StickyNote, CalendarClock, Save } from 'lucide-react';
 import { useState } from 'react';
 import { generateCV } from '@/lib/api';
 import { db } from '@/lib/supabase-external';
@@ -54,8 +54,44 @@ function CircularScore({ score }: { score: number }) {
 export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) {
   const [generating, setGenerating] = useState(false);
   const [marking, setMarking] = useState(false);
+  const [notes, setNotes] = useState('');
+  const [deadline, setDeadline] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+
+  // Sync local state when job changes
+  useState(() => {
+    if (job) {
+      setNotes(job.notes || '');
+      setDeadline(job.deadline ? new Date(job.deadline).toISOString().slice(0, 10) : '');
+    }
+  });
+
+  // Also update when job prop changes
+  const [prevJobId, setPrevJobId] = useState<string | null>(null);
+  if (job && job.id !== prevJobId) {
+    setPrevJobId(job.id);
+    setNotes(job.notes || '');
+    setDeadline(job.deadline ? new Date(job.deadline).toISOString().slice(0, 10) : '');
+  }
 
   if (!job) return null;
+
+  const handleSaveNotes = async () => {
+    setSavingNotes(true);
+    try {
+      const { error } = await db.from('jobs').update({
+        notes: notes || null,
+        deadline: deadline ? new Date(deadline).toISOString() : null,
+      }).eq('id', job.id);
+      if (error) throw error;
+      toast.success('Notes saved!');
+      onUpdate?.();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to save');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
 
   const handleGenerateCV = async () => {
     setGenerating(true);
@@ -149,6 +185,46 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
               <span className="font-medium">Applied{job.applied_at ? ` on ${new Date(job.applied_at).toLocaleDateString()}` : ''}</span>
             </div>
           )}
+
+          {/* Notes & Deadline */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <StickyNote className="h-4 w-4 text-accent" />
+              Interview Prep & Notes
+            </div>
+            <div className="glass-card rounded-xl p-3 space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider block mb-1.5">
+                  <CalendarClock className="h-3 w-3 inline mr-1" />
+                  Application Deadline
+                </label>
+                <input
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className="w-full rounded-lg border border-[hsl(var(--glass-border)/0.4)] bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider block mb-1.5">Notes</label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Prep questions, contacts, key points..."
+                  rows={4}
+                  className="w-full rounded-lg border border-[hsl(var(--glass-border)/0.4)] bg-transparent px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <button
+                onClick={handleSaveNotes}
+                disabled={savingNotes}
+                className="flex items-center justify-center gap-2 w-full rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-sm font-medium text-accent hover:bg-accent/10 transition-colors"
+              >
+                {savingNotes ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                {savingNotes ? 'Saving...' : 'Save Notes'}
+              </button>
+            </div>
+          </div>
 
           {/* Links */}
           <div className="space-y-2">

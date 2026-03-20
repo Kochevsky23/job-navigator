@@ -19,6 +19,8 @@ export interface Job {
   tailored_cv: string | null;
   applied_at: string | null;
   company_domain: string | null;
+  notes: string | null;
+  deadline: string | null;
 }
 
 export interface ScanRun {
