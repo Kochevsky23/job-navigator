@@ -38,11 +38,13 @@ function getGreeting() {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [scans, setScans] = useState<ScanRun[]>([]);
   const [scanning, setScanning] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [userName, setUserName] = useState('');
 
   const fetchData = async () => {
     const [jobsRes, scansRes] = await Promise.all([
