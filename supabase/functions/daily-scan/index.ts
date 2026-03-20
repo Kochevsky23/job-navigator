@@ -155,7 +155,8 @@ STEP 5 — Auto-REJECT (score 1, priority REJECTED) if:
 - Requires 3+ years experience
 - Completely unrelated to data/analytics/operations/IE/business analysis/project management
 
-For each job provide: company, role, location, job_link (actual URL if found, empty string if not), exp_required, reason (1-2 sentences justifying the score specifically referencing CV content).
+For each job provide: company, role, location, job_link (use the BASE URL only — remove all tracking parameters like trackingId, refId, lipi, midToken, trk etc. If no clean URL exists, use empty string), exp_required, reason (1-2 sentences justifying the score specifically referencing CV content).
+IMPORTANT: Keep reasons SHORT (under 20 words). Keep job_link URLs short (base URL only, no tracking params).
 
 ===== CANDIDATE CV =====
 ${truncatedCV}
