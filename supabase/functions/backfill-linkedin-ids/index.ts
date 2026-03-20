@@ -13,9 +13,16 @@ Deno.serve(async (req) => {
     Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const { data: jobs } = await supabase.from("jobs").select("id, company, role, job_link, linkedin_id").not("job_link", "is", null).neq("job_link", "").limit(10);
+  const { data: all } = await supabase.from("jobs").select("company, role, job_link, linkedin_id").limit(30);
 
-  return new Response(JSON.stringify(jobs?.map(j => ({ company: j.company, job_link: j.job_link, linkedin_id: j.linkedin_id })), null, 2), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  const withLinks = (all || []).filter(j => j.job_link && j.job_link.trim() !== "");
+  const linkedinInJobLink = withLinks.filter(j => j.job_link.includes("linkedin"));
+
+  return new Response(JSON.stringify({
+    total_jobs: all?.length,
+    with_job_link: withLinks.length,
+    linkedin_in_job_link: linkedinInJobLink.map(j => ({ company: j.company, job_link: j.job_link })),
+    sample_links: withLinks.slice(0, 5).map(j => ({ company: j.company, job_link: j.job_link, linkedin_id: j.linkedin_id })),
+    with_linkedin_id: (all || []).filter(j => j.linkedin_id).map(j => ({ company: j.company, linkedin_id: j.linkedin_id })),
+  }, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 });
