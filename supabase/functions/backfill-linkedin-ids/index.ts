@@ -13,22 +13,9 @@ Deno.serve(async (req) => {
     Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // Use ilike for case-insensitive match
-  const { data: jobs } = await supabase.from("jobs").select("id, job_link, linkedin_id").ilike("job_link", "%linkedin.com%");
+  const { data: jobs } = await supabase.from("jobs").select("id, company, role, job_link, linkedin_id").not("job_link", "is", null).neq("job_link", "").limit(10);
 
-  let fixed = 0;
-  for (const job of jobs || []) {
-    const match = job.job_link?.match(/linkedin\.com\/(?:comm\/)?jobs\/view\/(\d+)/i);
-    if (match) {
-      await supabase.from("jobs").update({
-        linkedin_id: match[1],
-        job_link: null,
-      }).eq("id", job.id);
-      fixed++;
-    }
-  }
-
-  return new Response(JSON.stringify({ total: jobs?.length || 0, fixed }), {
+  return new Response(JSON.stringify(jobs?.map(j => ({ company: j.company, job_link: j.job_link, linkedin_id: j.linkedin_id })), null, 2), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });
