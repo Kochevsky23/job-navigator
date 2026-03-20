@@ -107,6 +107,7 @@ export default function Jobs() {
               <TableHead>Priority</TableHead>
               <TableHead className="hidden lg:table-cell">Reason</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="hidden md:table-cell">Found</TableHead>
               <TableHead>CV</TableHead>
             </TableRow>
           </TableHeader>
