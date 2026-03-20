@@ -26,7 +26,7 @@ export default function Pipeline() {
   const [loading, setLoading] = useState(true);
 
   const fetchJobs = async () => {
-    const { data } = await supabase.from('jobs').select('*').order('score', { ascending: false });
+    const { data } = await db.from('jobs').select('*').order('score', { ascending: false });
     if (data) setJobs(data as unknown as Job[]);
     setLoading(false);
   };
