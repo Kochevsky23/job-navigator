@@ -4,9 +4,9 @@ import { runDailyScan } from '@/lib/api';
 import { Job, ScanRun } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, AlertTriangle, FileText, Clock, Loader2, Radar, ArrowRight } from 'lucide-react';
+import { Briefcase, AlertTriangle, FileText, Loader2, Radar, ArrowRight, CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
 import { format } from 'date-fns';
 import JobDetailPanel from '@/components/JobDetailPanel';
 
@@ -56,7 +56,7 @@ export default function Dashboard() {
   const fetchData = async () => {
     const [jobsRes, scansRes] = await Promise.all([
       db.from('jobs').select('*'),
-      db.from('scan_runs').select('*').order('started_at', { ascending: false }).limit(7),
+      db.from('scan_runs').select('*').order('started_at', { ascending: false }).limit(1),
     ]);
     if (jobsRes.data) setJobs(jobsRes.data as unknown as Job[]);
     if (scansRes.data) setScans(scansRes.data as unknown as ScanRun[]);
@@ -141,7 +141,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {stats.map((s, i) => (
           <div
             key={s.label}
@@ -155,30 +155,35 @@ export default function Dashboard() {
             <p className="text-3xl font-display font-bold tabular-nums">{s.value}</p>
           </div>
         ))}
-        <div
-          className="glass-card rounded-xl p-5 border-b-2 border-b-muted-foreground/30 animate-fade-up"
-          style={{ animationDelay: '320ms' }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Last Scan</span>
-            <Clock className="h-4 w-4 text-muted-foreground opacity-60" />
+      </div>
+
+      {/* Last Scan Status */}
+      <div className="animate-fade-up" style={{ animationDelay: '320ms' }}>
+        {lastScan ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            {lastScan.success ? (
+              <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))] shrink-0" />
+            ) : (
+              <XCircle className="h-4 w-4 text-destructive shrink-0" />
+            )}
+            <span>
+              Last scan: {format(new Date(lastScan.started_at), 'MMM d') === format(new Date(), 'MMM d')
+                ? `Today at ${format(new Date(lastScan.started_at), 'HH:mm')}`
+                : format(new Date(lastScan.started_at), 'MMM d \'at\' HH:mm')}
+            </span>
+            {lastScan.success && lastScan.jobs_added > 0 && (
+              <span className="text-[hsl(var(--success))] font-medium">+ {lastScan.jobs_added} new jobs</span>
+            )}
+            {lastScan.success && lastScan.jobs_added === 0 && (
+              <span className="text-muted-foreground">· no new jobs</span>
+            )}
+            {!lastScan.success && (
+              <span className="text-destructive font-medium">· failed</span>
+            )}
           </div>
-          {lastScan ? (
-            <div>
-              <p className="text-sm font-semibold">
-                {format(new Date(lastScan.started_at), 'MMM d, HH:mm')}
-              </p>
-              <Badge
-                variant={lastScan.success ? 'default' : 'destructive'}
-                className="mt-1.5 text-xs"
-              >
-                {lastScan.success ? 'Success' : 'Failed'}
-              </Badge>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No scans yet</p>
-          )}
-        </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No scans yet. Run your first scan!</p>
+        )}
       </div>
 
       {/* Best Matches */}
@@ -213,49 +218,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Recent Scans */}
-      <div className="animate-fade-up" style={{ animationDelay: '500ms' }}>
-        <h2 className="text-lg font-display font-semibold mb-4">Recent Scans</h2>
-        <div className="glass-card rounded-xl overflow-hidden">
-          {scans.length === 0 ? (
-            <p className="text-muted-foreground text-sm p-6">No scan history yet. Run your first scan!</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b border-[hsl(var(--glass-border)/0.3)]">
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Time</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Found</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Added</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Error</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {scans.map((s) => (
-                  <TableRow key={s.id} className="border-b border-[hsl(var(--glass-border)/0.2)] hover:bg-[hsl(var(--glass-border)/0.15)] transition-colors">
-                    <TableCell className="text-sm">{format(new Date(s.started_at), 'MMM d, HH:mm')}</TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                        s.success
-                          ? 'bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]'
-                          : 'bg-[hsl(var(--destructive)/0.12)] text-destructive'
-                      }`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${s.success ? 'bg-[hsl(var(--success))]' : 'bg-destructive'}`} />
-                        {s.success ? 'Success' : 'Failed'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="tabular-nums">{s.jobs_found}</TableCell>
-                    <TableCell className="tabular-nums">{s.jobs_added}</TableCell>
-                    <TableCell className="text-xs text-destructive max-w-[200px] truncate">
-                      {s.error_text || '—'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </div>
-      </div>
 
       <JobDetailPanel
         job={selectedJob}
