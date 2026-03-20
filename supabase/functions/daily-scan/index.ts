@@ -116,6 +116,7 @@ interface JobFromClaude {
   exp_required: string;
   job_link: string;
   linkedin_id: string;
+  company_domain: string;
   reason: string;
   status: string;
 }
