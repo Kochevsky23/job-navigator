@@ -40,6 +40,7 @@ export default function ScanSettings() {
       setCvText((data as any).cv_text || '');
       setCvFilename((data as any).cv_filename || '');
     }
+    setEmail(user?.email || '');
     setProfileLoading(false);
   };
 
