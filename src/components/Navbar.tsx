@@ -74,7 +74,14 @@ export default function Navbar() {
               {label}
             </NavLink>
           ))}
-          <div className="ml-2 pl-2 border-l border-[hsl(var(--glass-border)/0.3)] flex items-center gap-1">
+          <div className="ml-2 pl-2 border-l border-[hsl(var(--glass-border)/0.3)] flex items-center gap-1.5">
+            <button
+              onClick={toggleTheme}
+              className="rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--glass-border)/0.3)] transition-all duration-200 active:scale-95"
+              aria-label="Toggle theme"
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="rounded-full transition-opacity hover:opacity-80 active:scale-95 outline-none">
@@ -105,10 +112,6 @@ export default function Navbar() {
                 <DropdownMenuItem onClick={() => navigate('/settings')} className="cursor-pointer gap-2">
                   <Settings className="h-4 w-4" />
                   Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer gap-2">
-                  {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                  {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="cursor-pointer gap-2 text-destructive focus:text-destructive">
