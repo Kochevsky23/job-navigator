@@ -582,7 +582,21 @@ Deno.serve(async (req) => {
       jobs_added: jobsAdded,
     });
 
-    return new Response(JSON.stringify({ jobs_found: jobsFound, jobs_added: jobsAdded }), {
+    const skipDuplicate = skippedDetails.filter(s => s.reason.startsWith("duplicate")).length;
+    const skipError = skippedDetails.filter(s => s.reason.startsWith("error")).length;
+
+    console.log(`Scan complete: found=${jobsFound}, added=${jobsAdded}, skipped_duplicate=${skipDuplicate}, skipped_error=${skipError}`);
+    for (const s of skippedDetails) {
+      console.log(`  Skipped: ${s.company} — ${s.role} [${s.reason}]`);
+    }
+
+    return new Response(JSON.stringify({
+      jobs_found: jobsFound,
+      jobs_added: jobsAdded,
+      jobs_skipped_duplicate: skipDuplicate,
+      jobs_skipped_error: skipError,
+      skipped_details: skippedDetails,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
