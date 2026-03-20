@@ -184,10 +184,32 @@ Return ONLY valid JSON:
   if (!data.content?.[0]?.text) throw new Error("Claude returned no content: " + JSON.stringify(data));
 
   const text = data.content[0].text;
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("Could not parse JSON from Claude response");
-
-  const parsed = JSON.parse(jsonMatch[0]);
+  
+  // Try to extract JSON robustly by finding balanced braces
+  let jsonStr = "";
+  const startIdx = text.indexOf("{");
+  if (startIdx === -1) throw new Error("No JSON found in Claude response");
+  
+  let depth = 0;
+  for (let i = startIdx; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    jsonStr += ch;
+    if (depth === 0) break;
+  }
+  
+  // Clean common JSON issues: trailing commas before ] or }
+  jsonStr = jsonStr.replace(/,\s*([}\]])/g, "$1");
+  
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e: any) {
+    console.error("JSON parse failed, raw text:", jsonStr.substring(0, 500));
+    throw new Error("Failed to parse Claude JSON: " + e.message);
+  }
+  
   return parsed.jobs || [];
 }
 
