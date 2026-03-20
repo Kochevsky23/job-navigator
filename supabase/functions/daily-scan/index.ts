@@ -155,7 +155,8 @@ STEP 5 — Auto-REJECT (score 1, priority REJECTED) if:
 - Requires 3+ years experience
 - Completely unrelated to data/analytics/operations/IE/business analysis/project management
 
-For each job provide: company, role, location, job_link (actual URL if found, empty string if not), exp_required, reason (1-2 sentences justifying the score specifically referencing CV content).
+For each job provide: company, role, location, job_link (use the BASE URL only — remove all tracking parameters like trackingId, refId, lipi, midToken, trk etc. If no clean URL exists, use empty string), exp_required, reason (1-2 sentences justifying the score specifically referencing CV content).
+IMPORTANT: Keep reasons SHORT (under 20 words). Keep job_link URLs short (base URL only, no tracking params).
 
 ===== CANDIDATE CV =====
 ${truncatedCV}
@@ -179,7 +180,7 @@ Return ONLY valid JSON with no trailing commas:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -210,8 +211,30 @@ Return ONLY valid JSON with no trailing commas:
   try {
     parsed = JSON.parse(jsonStr);
   } catch (e: any) {
-    console.error("JSON parse failed, raw text:", jsonStr.substring(0, 500));
-    throw new Error("Failed to parse Claude JSON: " + e.message);
+    // Response was likely truncated — try to salvage by finding the last complete job object
+    console.error("JSON parse failed, attempting salvage. Error:", e.message);
+    
+    // Find the last complete "}" before the truncation point
+    const lastCompleteObj = jsonStr.lastIndexOf('"status": "New"');
+    if (lastCompleteObj > 0) {
+      // Find the closing brace of that object
+      const closingBrace = jsonStr.indexOf("}", lastCompleteObj);
+      if (closingBrace > 0) {
+        const salvaged = jsonStr.substring(0, closingBrace + 1) + "]}";
+        try {
+          parsed = JSON.parse(salvaged.replace(/,\s*([}\]])/g, "$1"));
+          console.log(`Salvaged ${parsed.jobs?.length || 0} jobs from truncated response`);
+        } catch {
+          // Last resort: try to extract individual job objects
+          console.error("Salvage also failed");
+          throw new Error("Failed to parse Claude JSON: " + e.message);
+        }
+      } else {
+        throw new Error("Failed to parse Claude JSON: " + e.message);
+      }
+    } else {
+      throw new Error("Failed to parse Claude JSON: " + e.message);
+    }
   }
   
   return parsed.jobs || [];
