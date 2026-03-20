@@ -21,7 +21,7 @@ export default function Dashboard() {
       supabase.from('jobs').select('*'),
       supabase.from('scan_runs').select('*').order('started_at', { ascending: false }).limit(7),
     ]);
-    if (jobsRes.data) setJobs(jobsRes.data);
+    if (jobsRes.data) setJobs(jobsRes.data as unknown as Job[]);
     if (scansRes.data) setScans(scansRes.data);
     setLoading(false);
   };
