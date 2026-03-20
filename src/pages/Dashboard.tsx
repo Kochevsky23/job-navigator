@@ -56,7 +56,15 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+    if (user) {
+      supabase.from('user_profiles').select('full_name').eq('id', user.id).single()
+        .then(({ data }) => {
+          if (data) setUserName((data as any).full_name?.split(' ')[0] || '');
+        });
+    }
+  }, [user]);
 
   const handleScan = async () => {
     setScanning(true);
