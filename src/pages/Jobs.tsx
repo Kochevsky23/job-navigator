@@ -142,6 +142,10 @@ export default function Jobs() {
                   <TableCell>
                     <Badge variant="outline" className="text-xs">{job.status}</Badge>
                   </TableCell>
+                  <TableCell className="hidden md:table-cell text-xs text-muted-foreground whitespace-nowrap">
+                    {job.alert_date ? formatDistanceToNow(new Date(job.alert_date), { addSuffix: true }) : '—'}
+                  </TableCell>
+                  </TableCell>
                   <TableCell>
                     {job.tailored_cv ? (
                       <FileText className="h-4 w-4 text-primary" />
