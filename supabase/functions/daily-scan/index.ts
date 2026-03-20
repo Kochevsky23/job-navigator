@@ -498,7 +498,11 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      if (existing) continue;
+      if (existing) {
+        console.log(`SKIP duplicate fingerprint: ${job.company} — ${job.role} (fp: ${fingerprint})`);
+        skippedDetails.push({ company: job.company, role: job.role, reason: "duplicate_fingerprint" });
+        continue;
+      }
 
       // Also check by company + role to catch near-duplicates
       const { data: byCompanyRole } = await supabase
