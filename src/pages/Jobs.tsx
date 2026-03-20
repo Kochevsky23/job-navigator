@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Loader2, FileText } from 'lucide-react';
 import JobDetailPanel from '@/components/JobDetailPanel';
+import CompanyLogo from '@/components/CompanyLogo';
 
 const priorityClass: Record<string, string> = {
   HIGH: 'bg-priority-high priority-high border',
