@@ -186,6 +186,46 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
             </div>
           )}
 
+          {/* Notes & Deadline */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <StickyNote className="h-4 w-4 text-accent" />
+              Interview Prep & Notes
+            </div>
+            <div className="glass-card rounded-xl p-3 space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider block mb-1.5">
+                  <CalendarClock className="h-3 w-3 inline mr-1" />
+                  Application Deadline
+                </label>
+                <input
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className="w-full rounded-lg border border-[hsl(var(--glass-border)/0.4)] bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider block mb-1.5">Notes</label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Prep questions, contacts, key points..."
+                  rows={4}
+                  className="w-full rounded-lg border border-[hsl(var(--glass-border)/0.4)] bg-transparent px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <button
+                onClick={handleSaveNotes}
+                disabled={savingNotes}
+                className="flex items-center justify-center gap-2 w-full rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-sm font-medium text-accent hover:bg-accent/10 transition-colors"
+              >
+                {savingNotes ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                {savingNotes ? 'Saving...' : 'Save Notes'}
+              </button>
+            </div>
+          </div>
+
           {/* Links */}
           <div className="space-y-2">
             {job.job_link && !job.job_link.includes('linkedin.com') ? (
