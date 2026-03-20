@@ -5,6 +5,7 @@ import { ExternalLink, FileText, Loader2, Download } from 'lucide-react';
 import { useState } from 'react';
 import { generateCV } from '@/lib/api';
 import { toast } from 'sonner';
+import CompanyLogo from '@/components/CompanyLogo';
 
 interface Props {
   job: Job | null;
