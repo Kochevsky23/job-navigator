@@ -54,8 +54,44 @@ function CircularScore({ score }: { score: number }) {
 export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) {
   const [generating, setGenerating] = useState(false);
   const [marking, setMarking] = useState(false);
+  const [notes, setNotes] = useState('');
+  const [deadline, setDeadline] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+
+  // Sync local state when job changes
+  useState(() => {
+    if (job) {
+      setNotes(job.notes || '');
+      setDeadline(job.deadline ? new Date(job.deadline).toISOString().slice(0, 10) : '');
+    }
+  });
+
+  // Also update when job prop changes
+  const [prevJobId, setPrevJobId] = useState<string | null>(null);
+  if (job && job.id !== prevJobId) {
+    setPrevJobId(job.id);
+    setNotes(job.notes || '');
+    setDeadline(job.deadline ? new Date(job.deadline).toISOString().slice(0, 10) : '');
+  }
 
   if (!job) return null;
+
+  const handleSaveNotes = async () => {
+    setSavingNotes(true);
+    try {
+      const { error } = await db.from('jobs').update({
+        notes: notes || null,
+        deadline: deadline ? new Date(deadline).toISOString() : null,
+      }).eq('id', job.id);
+      if (error) throw error;
+      toast.success('Notes saved!');
+      onUpdate?.();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to save');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
 
   const handleGenerateCV = async () => {
     setGenerating(true);
