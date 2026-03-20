@@ -1,0 +1,312 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+async function getGoogleAccessToken(): Promise<string> {
+  const resp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: Deno.env.get("GOOGLE_CLIENT_ID")!,
+      client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET")!,
+      refresh_token: Deno.env.get("GOOGLE_REFRESH_TOKEN")!,
+      grant_type: "refresh_token",
+    }),
+  });
+  const data = await resp.json();
+  if (!data.access_token) throw new Error("Failed to get Google access token: " + JSON.stringify(data));
+  return data.access_token;
+}
+
+async function fetchJobAlertEmails(accessToken: string): Promise<string[]> {
+  const after = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
+  const query = encodeURIComponent(`label:Job Alerts after:${after}`);
+  const listResp = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=50`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const listData = await listResp.json();
+  if (!listData.messages || listData.messages.length === 0) return [];
+
+  const emails: string[] = [];
+  for (const msg of listData.messages) {
+    const msgResp = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const msgData = await msgResp.json();
+    const subject = msgData.payload?.headers?.find((h: any) => h.name === "Subject")?.value || "";
+    const from = msgData.payload?.headers?.find((h: any) => h.name === "From")?.value || "";
+    const snippet = msgData.snippet || "";
+    emails.push(`From: ${from}\nSubject: ${subject}\nSnippet: ${snippet}`);
+  }
+  return emails;
+}
+
+async function fetchCVFromDrive(accessToken: string): Promise<string> {
+  const query = encodeURIComponent("name='Dor_Kochevsky_CV_Main'");
+  const searchResp = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType)`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const searchData = await searchResp.json();
+  if (!searchData.files || searchData.files.length === 0) return "CV not found on Google Drive";
+
+  const file = searchData.files[0];
+  let exportUrl: string;
+  if (file.mimeType === "application/vnd.google-apps.document") {
+    exportUrl = `https://www.googleapis.com/drive/v3/files/${file.id}/export?mimeType=text/plain`;
+  } else {
+    exportUrl = `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`;
+  }
+  const cvResp = await fetch(exportUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+  return await cvResp.text();
+}
+
+interface JobFromClaude {
+  company: string;
+  role: string;
+  location: string;
+  score: number;
+  priority: string;
+  exp_required: string;
+  job_link: string;
+  reason: string;
+  status: string;
+}
+
+async function analyzeWithClaude(emails: string[], cvText: string): Promise<JobFromClaude[]> {
+  const emailContent = emails.join("\n\n---\n\n");
+  const prompt = `You are a job scanning assistant for Dor Kochevsky, an Israeli student studying Industrial Engineering and Management.
+
+Candidate CV content:
+${cvText}
+
+Recent Gmail Job Alerts:
+${emailContent}
+
+Instructions:
+1. Extract every unique job from the last 24 hours
+2. For each job identify: company, role, location, job_link, exp_required
+3. REJECT if: title contains Senior/Lead/Principal/Manager/Director/Head, requires 2+ years experience, unrelated to data/analytics/ops/IE/business analysis
+4. Score fit 1-10 based on CV match
+5. priority: HIGH=strong junior fit, MEDIUM=possible fit, LOW=weak fit, REJECTED=filtered out
+6. reason = one short sentence
+
+Return ONLY valid JSON:
+{
+  "jobs": [{
+    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "reason": "", "status": "New"
+  }]
+}`;
+
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": Deno.env.get("CLAUDE_API_KEY")!,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  const data = await resp.json();
+  if (!data.content?.[0]?.text) throw new Error("Claude returned no content: " + JSON.stringify(data));
+
+  const text = data.content[0].text;
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("Could not parse JSON from Claude response");
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  return parsed.jobs || [];
+}
+
+async function generateCVForJob(job: any, cvText: string): Promise<string> {
+  const prompt = `You are a senior CV expert. Tailor this CV for the specific job.
+
+BASE CV:
+${cvText}
+
+TARGET JOB:
+- Company: ${job.company}
+- Role: ${job.role}
+- Location: ${job.location}
+- Fit Score: ${job.score}/10
+- Reason: ${job.reason}
+
+RULES:
+- Keep everything truthful, do not invent experience
+- Rewrite wording to be more impactful
+- Prioritize relevance to this job
+
+STRUCTURE:
+Full Name
+Location | Email | Phone | LinkedIn
+
+PROFESSIONAL SUMMARY
+3-4 strong lines tailored to the job
+
+SKILLS
+Data / Programming / Tools / Business
+
+EXPERIENCE
+Role | Company | Dates
+- 4-6 strong bullets
+
+PROJECTS
+
+EDUCATION
+
+LANGUAGES
+
+Return only the CV text.`;
+
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": Deno.env.get("CLAUDE_API_KEY")!,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  const data = await resp.json();
+  return data.content?.[0]?.text || "";
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  let jobsFound = 0;
+  let jobsAdded = 0;
+
+  try {
+    // 1. Get Google access token
+    const accessToken = await getGoogleAccessToken();
+
+    // 2. Fetch emails
+    const emails = await fetchJobAlertEmails(accessToken);
+    if (emails.length === 0) {
+      // No emails, save scan and return
+      await supabase.from("scan_runs").insert({
+        success: true,
+        jobs_found: 0,
+        jobs_added: 0,
+      });
+      return new Response(JSON.stringify({ jobs_found: 0, jobs_added: 0 }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // 3. Fetch CV from Drive
+    const cvText = await fetchCVFromDrive(accessToken);
+
+    // 4. Analyze with Claude
+    const jobs = await analyzeWithClaude(emails, cvText);
+    jobsFound = jobs.length;
+
+    // 5. Upsert jobs with deduplication
+    for (const job of jobs) {
+      const fingerprint = job.job_link
+        ? `link::${job.job_link}`
+        : `meta::${job.company}__${job.role}__${job.location}`;
+
+      const { data: existing } = await supabase
+        .from("jobs")
+        .select("id")
+        .eq("fingerprint", fingerprint)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from("jobs").update({
+          score: job.score,
+          priority: job.priority,
+          reason: job.reason,
+          exp_required: job.exp_required,
+          alert_date: new Date().toISOString(),
+        }).eq("id", existing.id);
+      } else {
+        await supabase.from("jobs").insert({
+          company: job.company,
+          role: job.role,
+          location: job.location,
+          score: job.score,
+          priority: job.priority,
+          reason: job.reason,
+          exp_required: job.exp_required,
+          job_link: job.job_link,
+          status: job.status || "New",
+          fingerprint,
+          alert_date: new Date().toISOString(),
+        });
+        jobsAdded++;
+      }
+    }
+
+    // 6. Auto-generate CVs for high-scoring jobs
+    const { data: highScoreJobs } = await supabase
+      .from("jobs")
+      .select("*")
+      .gt("score", 6)
+      .is("tailored_cv", null)
+      .neq("priority", "REJECTED");
+
+    if (highScoreJobs && highScoreJobs.length > 0) {
+      for (const hsJob of highScoreJobs) {
+        try {
+          const tailoredCV = await generateCVForJob(hsJob, cvText);
+          if (tailoredCV) {
+            await supabase.from("jobs").update({ tailored_cv: tailoredCV }).eq("id", hsJob.id);
+          }
+          // Wait 4 seconds between CV generations
+          await new Promise((r) => setTimeout(r, 4000));
+        } catch (e) {
+          console.error(`CV generation failed for job ${hsJob.id}:`, e);
+        }
+      }
+    }
+
+    // 7. Save scan result
+    await supabase.from("scan_runs").insert({
+      success: true,
+      jobs_found: jobsFound,
+      jobs_added: jobsAdded,
+    });
+
+    return new Response(JSON.stringify({ jobs_found: jobsFound, jobs_added: jobsAdded }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("Scan error:", error);
+    await supabase.from("scan_runs").insert({
+      success: false,
+      jobs_found: jobsFound,
+      jobs_added: jobsAdded,
+      error_text: error.message || "Unknown error",
+    });
+    return new Response(JSON.stringify({ error: error.message || "Scan failed" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
