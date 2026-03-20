@@ -73,6 +73,21 @@ export default function ScanSettings() {
     }
   };
 
+  const handleChangeEmail = async () => {
+    if (!email || email === user?.email) return;
+    setSavingEmail(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ email });
+      if (error) throw error;
+      await supabase.from('user_profiles').update({ email }).eq('id', user!.id);
+      toast.success('Confirmation email sent to your new address. Please check your inbox.');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to update email');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
   const handleFileUpload = useCallback(async (file: File) => {
     if (!user) return;
     const ext = file.name.split('.').pop()?.toLowerCase();
