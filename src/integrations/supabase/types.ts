@@ -21,12 +21,14 @@ export type Database = {
           company: string
           company_domain: string | null
           created_at: string
+          deadline: string | null
           exp_required: string | null
           fingerprint: string | null
           id: string
           job_link: string | null
           linkedin_id: string | null
           location: string | null
+          notes: string | null
           priority: string
           reason: string | null
           role: string
@@ -41,12 +43,14 @@ export type Database = {
           company?: string
           company_domain?: string | null
           created_at?: string
+          deadline?: string | null
           exp_required?: string | null
           fingerprint?: string | null
           id?: string
           job_link?: string | null
           linkedin_id?: string | null
           location?: string | null
+          notes?: string | null
           priority?: string
           reason?: string | null
           role?: string
@@ -61,12 +65,14 @@ export type Database = {
           company?: string
           company_domain?: string | null
           created_at?: string
+          deadline?: string | null
           exp_required?: string | null
           fingerprint?: string | null
           id?: string
           job_link?: string | null
           linkedin_id?: string | null
           location?: string | null
+          notes?: string | null
           priority?: string
           reason?: string | null
           role?: string
