@@ -381,7 +381,7 @@ Deno.serve(async (req) => {
       else if (job.score <= 6 && job.priority === "HIGH") job.priority = "MEDIUM";
     }
 
-    // 6. Upsert jobs with robust deduplication
+    // 6. Insert new jobs only — skip duplicates entirely
     for (const job of jobs) {
       const link = job.job_link?.trim().toLowerCase();
       const hasValidLink = link && link.startsWith("http");
@@ -389,46 +389,29 @@ Deno.serve(async (req) => {
         ? `link::${link}`
         : `meta::${(job.company || '').trim().toLowerCase()}__${(job.role || '').trim().toLowerCase()}__${(job.location || '').trim().toLowerCase()}`;
 
-      // Check by fingerprint
-      const { data: byFingerprint } = await supabase
+      // Check by fingerprint — if exists, skip entirely
+      const { data: existing } = await supabase
         .from("jobs")
         .select("id")
         .eq("fingerprint", fingerprint)
+        .limit(1)
         .maybeSingle();
 
-      if (byFingerprint) {
-        await supabase.from("jobs").update({
-          score: job.score,
-          priority: job.priority,
-          reason: job.reason,
-          exp_required: job.exp_required,
-          alert_date: new Date().toISOString(),
-        }).eq("id", byFingerprint.id);
-        continue;
-      }
+      if (existing) continue;
 
-      // Also check by company + role (case-insensitive) to catch duplicates with different fingerprints
+      // Also check by company + role to catch near-duplicates
       const { data: byCompanyRole } = await supabase
         .from("jobs")
         .select("id")
         .ilike("company", (job.company || '').trim())
         .ilike("role", (job.role || '').trim())
+        .limit(1)
         .maybeSingle();
 
-      if (byCompanyRole) {
-        await supabase.from("jobs").update({
-          score: job.score,
-          priority: job.priority,
-          reason: job.reason,
-          exp_required: job.exp_required,
-          alert_date: new Date().toISOString(),
-          fingerprint,
-        }).eq("id", byCompanyRole.id);
-        continue;
-      }
+      if (byCompanyRole) continue;
 
       // New job — insert
-      await supabase.from("jobs").insert({
+      const { error: insertError } = await supabase.from("jobs").insert({
         company: job.company,
         role: job.role,
         location: job.location,
@@ -441,7 +424,14 @@ Deno.serve(async (req) => {
         fingerprint,
         alert_date: new Date().toISOString(),
       });
-      jobsAdded++;
+
+      // If unique constraint catches it, just skip
+      if (insertError) {
+        if (insertError.code === "23505") continue; // unique violation
+        console.error("Insert error:", insertError);
+      } else {
+        jobsAdded++;
+      }
     }
 
     // 6. Auto-generate CVs for high-scoring jobs
