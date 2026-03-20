@@ -57,6 +57,7 @@ export default function ScanSettings() {
     setSaving(true);
     try {
       const { error } = await supabase.from('user_profiles').update({
+        full_name: fullName,
         city,
         cv_text: cvText,
       }).eq('id', user.id);
