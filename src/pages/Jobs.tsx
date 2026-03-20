@@ -4,7 +4,6 @@ import { db } from '@/lib/supabase-external';
 import { Job, Priority, JobStatus } from '@/types/database';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Loader2, FileText } from 'lucide-react';
@@ -16,6 +15,15 @@ const priorityClass: Record<string, string> = {
   LOW: 'bg-priority-low priority-low border',
   REJECTED: 'bg-priority-rejected priority-rejected border',
 };
+
+function ScorePill({ score }: { score: number }) {
+  const cls = score >= 8 ? 'score-pill-high' : score >= 6 ? 'score-pill-medium' : 'score-pill-low';
+  return (
+    <span className={`${cls} rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums inline-block`}>
+      {score}
+    </span>
+  );
+}
 
 export default function Jobs() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -51,12 +59,12 @@ export default function Jobs() {
   }
 
   return (
-    <div className="container py-6 space-y-4">
-      <h1 className="text-2xl font-display font-bold">Jobs</h1>
+    <div className="container py-8 space-y-5">
+      <h1 className="text-2xl font-display font-bold animate-fade-up">Jobs</h1>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 animate-fade-up" style={{ animationDelay: '80ms' }}>
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="w-[140px] bg-card border-border">
+          <SelectTrigger className="w-[140px] glass-card border-[hsl(var(--glass-border)/0.4)]">
             <SelectValue placeholder="Priority" />
           </SelectTrigger>
           <SelectContent>
@@ -69,7 +77,7 @@ export default function Jobs() {
         </Select>
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[150px] bg-card border-border">
+          <SelectTrigger className="w-[150px] glass-card border-[hsl(var(--glass-border)/0.4)]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -93,45 +101,45 @@ export default function Jobs() {
           />
         </div>
 
-        <span className="text-sm text-muted-foreground ml-auto">{filtered.length} jobs</span>
+        <span className="text-sm text-muted-foreground ml-auto tabular-nums">{filtered.length} jobs</span>
       </div>
 
-      <div className="rounded-lg border border-border overflow-hidden">
+      <div className="glass-card rounded-xl overflow-hidden animate-fade-up" style={{ animationDelay: '160ms' }}>
         <Table>
           <TableHeader>
-            <TableRow className="bg-secondary/50">
-              <TableHead>Company</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead className="hidden md:table-cell">Location</TableHead>
-              <TableHead>Score</TableHead>
-              <TableHead>Priority</TableHead>
-              <TableHead className="hidden lg:table-cell">Reason</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="hidden md:table-cell">Found</TableHead>
-              <TableHead>CV</TableHead>
+            <TableRow className="border-b border-[hsl(var(--glass-border)/0.3)]">
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Company</TableHead>
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Role</TableHead>
+              <TableHead className="hidden md:table-cell text-xs uppercase tracking-wider text-muted-foreground">Location</TableHead>
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Score</TableHead>
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Priority</TableHead>
+              <TableHead className="hidden lg:table-cell text-xs uppercase tracking-wider text-muted-foreground">Reason</TableHead>
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
+              <TableHead className="hidden md:table-cell text-xs uppercase tracking-wider text-muted-foreground">Found</TableHead>
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">CV</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                   No jobs found matching filters
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((job) => (
+              filtered.map((job, i) => (
                 <TableRow
                   key={job.id}
-                  className="cursor-pointer hover:bg-secondary/50 transition-colors"
+                  className={`cursor-pointer transition-colors duration-150 border-b border-[hsl(var(--glass-border)/0.15)] hover:bg-[hsl(var(--primary)/0.04)] ${
+                    i % 2 === 1 ? 'bg-[hsl(var(--glass-bg)/0.3)]' : ''
+                  }`}
                   onClick={() => setSelectedJob(job)}
                 >
                   <TableCell className="font-medium" dir="auto">{job.company}</TableCell>
                   <TableCell dir="auto">{job.role}</TableCell>
-                  <TableCell className="hidden md:table-cell" dir="auto">{job.location}</TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground" dir="auto">{job.location}</TableCell>
                   <TableCell>
-                    <span className={`font-bold ${job.score >= 7 ? 'priority-high' : job.score >= 4 ? 'priority-medium' : 'priority-low'}`}>
-                      {job.score}
-                    </span>
+                    <ScorePill score={job.score} />
                   </TableCell>
                   <TableCell>
                     <Badge className={`${priorityClass[job.priority]} text-xs`}>{job.priority}</Badge>
@@ -140,7 +148,7 @@ export default function Jobs() {
                     {job.reason}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="text-xs">{job.status}</Badge>
+                    <Badge variant="outline" className="text-xs border-[hsl(var(--glass-border)/0.5)]">{job.status}</Badge>
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-xs text-muted-foreground whitespace-nowrap">
                     {job.alert_date ? formatDistanceToNow(new Date(job.alert_date), { addSuffix: true }) : '—'}
@@ -149,7 +157,7 @@ export default function Jobs() {
                     {job.tailored_cv ? (
                       <FileText className="h-4 w-4 text-primary" />
                     ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
+                      <span className="text-muted-foreground/40 text-xs">—</span>
                     )}
                   </TableCell>
                 </TableRow>
