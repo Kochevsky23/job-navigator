@@ -185,6 +185,34 @@ export default function ScanSettings() {
                 <p className="text-xs text-muted-foreground">Shown in your dashboard greeting</p>
               </div>
 
+              {/* Email */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
+                  Email Address
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="bg-secondary border-[hsl(var(--glass-border)/0.3)]"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={savingEmail || email === user?.email}
+                    onClick={handleChangeEmail}
+                    className="shrink-0 gap-1.5"
+                  >
+                    {savingEmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Update
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">A confirmation will be sent to your new email</p>
+              </div>
+
               {/* City */}
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-1.5">
