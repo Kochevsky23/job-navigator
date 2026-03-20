@@ -52,6 +52,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [userName, setUserName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
 
   const fetchData = async () => {
     const [jobsRes, scansRes] = await Promise.all([
