@@ -342,7 +342,46 @@ Deno.serve(async (req) => {
     const jobs = await analyzeWithClaude(emails, cvText);
     jobsFound = jobs.length;
 
-    // 5. Upsert jobs with deduplication
+    // 5. Post-process: enforce hard scoring rules
+    const SENIOR_TITLES = /\b(senior|lead|principal|manager|director|head|vp|staff|architect)\b/i;
+    const HIGH_EXP = /\b(3\+|4\+|5\+|6\+|7\+|8\+|3-5|5-7|3 years|4 years|5 years)\b/i;
+    const RELEVANT_FIELDS = /\b(data|analy|operations|business|project.?manag|supply.?chain|logistics|industrial.?engineer|BI|reporting|excel|sql|python|planning|procurement)\b/i;
+
+    for (const job of jobs) {
+      const title = (job.role || '').trim();
+      const exp = (job.exp_required || '').trim();
+
+      // Hard rule: senior titles → max score 3, REJECTED
+      if (SENIOR_TITLES.test(title)) {
+        job.score = Math.min(job.score, 3);
+        job.priority = "REJECTED";
+        if (!job.reason.includes("senior")) {
+          job.reason = `Score ${job.score} — title contains senior-level keyword, not suitable for student. ${job.reason}`;
+        }
+      }
+
+      // Hard rule: high experience → max score 3, REJECTED
+      if (HIGH_EXP.test(exp)) {
+        job.score = Math.min(job.score, 3);
+        job.priority = "REJECTED";
+        if (!job.reason.includes("experience")) {
+          job.reason = `Score ${job.score} — requires ${exp} experience, Dor is a 3rd year student. ${job.reason}`;
+        }
+      }
+
+      // Hard rule: unrelated field → max score 4, LOW
+      if (!RELEVANT_FIELDS.test(title) && !RELEVANT_FIELDS.test(job.reason)) {
+        job.score = Math.min(job.score, 4);
+        if (job.priority !== "REJECTED") job.priority = "LOW";
+      }
+
+      // Ensure priority matches score
+      if (job.score <= 2) job.priority = "REJECTED";
+      else if (job.score <= 4 && job.priority !== "REJECTED") job.priority = "LOW";
+      else if (job.score <= 6 && job.priority === "HIGH") job.priority = "MEDIUM";
+    }
+
+    // 6. Upsert jobs with robust deduplication
     for (const job of jobs) {
       const link = job.job_link?.trim().toLowerCase();
       const hasValidLink = link && link.startsWith("http");
@@ -350,36 +389,59 @@ Deno.serve(async (req) => {
         ? `link::${link}`
         : `meta::${(job.company || '').trim().toLowerCase()}__${(job.role || '').trim().toLowerCase()}__${(job.location || '').trim().toLowerCase()}`;
 
-      const { data: existing } = await supabase
+      // Check by fingerprint
+      const { data: byFingerprint } = await supabase
         .from("jobs")
         .select("id")
         .eq("fingerprint", fingerprint)
         .maybeSingle();
 
-      if (existing) {
+      if (byFingerprint) {
         await supabase.from("jobs").update({
           score: job.score,
           priority: job.priority,
           reason: job.reason,
           exp_required: job.exp_required,
           alert_date: new Date().toISOString(),
-        }).eq("id", existing.id);
-      } else {
-        await supabase.from("jobs").insert({
-          company: job.company,
-          role: job.role,
-          location: job.location,
+        }).eq("id", byFingerprint.id);
+        continue;
+      }
+
+      // Also check by company + role (case-insensitive) to catch duplicates with different fingerprints
+      const { data: byCompanyRole } = await supabase
+        .from("jobs")
+        .select("id")
+        .ilike("company", (job.company || '').trim())
+        .ilike("role", (job.role || '').trim())
+        .maybeSingle();
+
+      if (byCompanyRole) {
+        await supabase.from("jobs").update({
           score: job.score,
           priority: job.priority,
           reason: job.reason,
           exp_required: job.exp_required,
-          job_link: job.job_link,
-          status: job.status || "New",
-          fingerprint,
           alert_date: new Date().toISOString(),
-        });
-        jobsAdded++;
+          fingerprint,
+        }).eq("id", byCompanyRole.id);
+        continue;
       }
+
+      // New job — insert
+      await supabase.from("jobs").insert({
+        company: job.company,
+        role: job.role,
+        location: job.location,
+        score: job.score,
+        priority: job.priority,
+        reason: job.reason,
+        exp_required: job.exp_required,
+        job_link: job.job_link,
+        status: job.status || "New",
+        fingerprint,
+        alert_date: new Date().toISOString(),
+      });
+      jobsAdded++;
     }
 
     // 6. Auto-generate CVs for high-scoring jobs
