@@ -197,7 +197,7 @@ ${truncatedCV}
 ===== RECENT JOB ALERT EMAILS =====
 ${emailContent}
 
-Return ONLY valid JSON with no trailing commas:
+Return ONLY valid JSON with no trailing commas. Use only ASCII characters in all string values (no Hebrew, no special quotes, no newlines inside strings):
 {
   "jobs": [{
     "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "company_domain": "", "reason": "", "status": "New"
