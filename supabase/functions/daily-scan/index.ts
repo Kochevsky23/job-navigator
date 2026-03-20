@@ -387,18 +387,28 @@ Deno.serve(async (req) => {
 
     // 6. Clean up job links and insert new jobs — skip duplicates entirely
     for (const job of jobs) {
-      // Normalize LinkedIn URLs: remove /comm/ and strip query params
+      // Extract linkedin_id from job_link if it's a LinkedIn URL
       if (job.job_link) {
-        job.job_link = job.job_link.replace(/linkedin\.com\/comm\/jobs/gi, "linkedin.com/jobs");
-        // Strip query params from LinkedIn job URLs, keeping just the path
-        job.job_link = job.job_link.replace(/(linkedin\.com\/jobs\/view\/\d+\/?)(\?.*)?$/i, "$1");
+        const linkedinMatch = job.job_link.match(/linkedin\.com\/(?:comm\/)?jobs\/view\/(\d+)/i);
+        if (linkedinMatch) {
+          // Move LinkedIn ID to linkedin_id field, clear job_link
+          if (!job.linkedin_id) job.linkedin_id = linkedinMatch[1];
+          job.job_link = "";
+        }
       }
 
-      const link = job.job_link?.trim().toLowerCase();
-      const hasValidLink = link && link.startsWith("http");
-      const fingerprint = hasValidLink
-        ? `link::${link}`
-        : `meta::${(job.company || '').trim().toLowerCase()}__${(job.role || '').trim().toLowerCase()}__${(job.location || '').trim().toLowerCase()}`;
+      // Clean linkedin_id to just digits
+      if (job.linkedin_id) {
+        const idMatch = job.linkedin_id.match(/(\d+)/);
+        job.linkedin_id = idMatch ? idMatch[1] : "";
+      }
+
+      // Build fingerprint
+      const linkedinFp = job.linkedin_id ? `linkedin::${job.linkedin_id}` : "";
+      const linkFp = job.job_link?.trim().toLowerCase();
+      const hasValidLink = linkFp && linkFp.startsWith("http");
+      const fingerprint = linkedinFp
+        || (hasValidLink ? `link::${linkFp}` : `meta::${(job.company || '').trim().toLowerCase()}__${(job.role || '').trim().toLowerCase()}__${(job.location || '').trim().toLowerCase()}`);
 
       // Check by fingerprint — if exists, skip entirely
       const { data: existing } = await supabase
@@ -430,7 +440,8 @@ Deno.serve(async (req) => {
         priority: job.priority,
         reason: job.reason,
         exp_required: job.exp_required,
-        job_link: job.job_link,
+        job_link: job.job_link || null,
+        linkedin_id: job.linkedin_id || null,
         status: job.status || "New",
         fingerprint,
         alert_date: new Date().toISOString(),
