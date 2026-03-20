@@ -383,9 +383,11 @@ Deno.serve(async (req) => {
 
     // 6. Clean up job links and insert new jobs — skip duplicates entirely
     for (const job of jobs) {
-      // Normalize LinkedIn tracking URLs: /comm/jobs/view/ID → /jobs/view/ID
+      // Normalize LinkedIn URLs: remove /comm/ and strip query params
       if (job.job_link) {
         job.job_link = job.job_link.replace(/linkedin\.com\/comm\/jobs/gi, "linkedin.com/jobs");
+        // Strip query params from LinkedIn job URLs, keeping just the path
+        job.job_link = job.job_link.replace(/(linkedin\.com\/jobs\/view\/\d+\/?)(\?.*)?$/i, "$1");
       }
 
       const link = job.job_link?.trim().toLowerCase();
