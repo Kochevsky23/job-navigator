@@ -27,7 +27,7 @@ export default function Pipeline() {
 
   const fetchJobs = async () => {
     const { data } = await supabase.from('jobs').select('*').order('score', { ascending: false });
-    if (data) setJobs(data);
+    if (data) setJobs(data as unknown as Job[]);
     setLoading(false);
   };
 
