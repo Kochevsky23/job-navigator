@@ -14,7 +14,87 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      jobs: {
+        Row: {
+          alert_date: string | null
+          applied_at: string | null
+          company: string
+          created_at: string
+          exp_required: string | null
+          fingerprint: string | null
+          id: string
+          job_link: string | null
+          location: string | null
+          priority: string
+          reason: string | null
+          role: string
+          score: number
+          status: string
+          tailored_cv: string | null
+        }
+        Insert: {
+          alert_date?: string | null
+          applied_at?: string | null
+          company?: string
+          created_at?: string
+          exp_required?: string | null
+          fingerprint?: string | null
+          id?: string
+          job_link?: string | null
+          location?: string | null
+          priority?: string
+          reason?: string | null
+          role?: string
+          score?: number
+          status?: string
+          tailored_cv?: string | null
+        }
+        Update: {
+          alert_date?: string | null
+          applied_at?: string | null
+          company?: string
+          created_at?: string
+          exp_required?: string | null
+          fingerprint?: string | null
+          id?: string
+          job_link?: string | null
+          location?: string | null
+          priority?: string
+          reason?: string | null
+          role?: string
+          score?: number
+          status?: string
+          tailored_cv?: string | null
+        }
+        Relationships: []
+      }
+      scan_runs: {
+        Row: {
+          error_text: string | null
+          id: string
+          jobs_added: number
+          jobs_found: number
+          started_at: string
+          success: boolean
+        }
+        Insert: {
+          error_text?: string | null
+          id?: string
+          jobs_added?: number
+          jobs_found?: number
+          started_at?: string
+          success?: boolean
+        }
+        Update: {
+          error_text?: string | null
+          id?: string
+          jobs_added?: number
+          jobs_found?: number
+          started_at?: string
+          success?: boolean
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
