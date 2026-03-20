@@ -59,9 +59,36 @@ export default function Jobs() {
     );
   }
 
+  const exportCSV = () => {
+    const headers = ['Company', 'Role', 'Location', 'Score', 'Priority', 'Status', 'Reason', 'Job Link', 'Deadline', 'Applied At'];
+    const rows = filtered.map(j => [
+      j.company, j.role, j.location, j.score, j.priority, j.status,
+      `"${(j.reason || '').replace(/"/g, '""')}"`, j.job_link || '',
+      j.deadline ? new Date(j.deadline).toLocaleDateString() : '',
+      j.applied_at ? new Date(j.applied_at).toLocaleDateString() : '',
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `jobs_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="container py-8 space-y-5">
-      <h1 className="text-2xl font-display font-bold animate-fade-up">Jobs</h1>
+      <div className="flex items-center justify-between animate-fade-up">
+        <h1 className="text-2xl font-display font-bold">Jobs</h1>
+        <button
+          onClick={exportCSV}
+          className="flex items-center gap-2 rounded-xl border border-[hsl(var(--glass-border)/0.5)] px-4 py-2 text-sm font-medium hover:bg-[hsl(var(--glass-border)/0.2)] transition-colors"
+        >
+          <Download className="h-4 w-4" />
+          Export CSV
+        </button>
+      </div>
 
       <div className="flex flex-wrap items-center gap-3 animate-fade-up" style={{ animationDelay: '80ms' }}>
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
