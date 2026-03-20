@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Radar, Mail, Brain, FileText, Clock, Upload, User, MapPin, Save, CheckCircle2 } from 'lucide-react';
+import { Loader2, Radar, Mail, Brain, FileText, Clock, Upload, User, MapPin, Save, CheckCircle2, AtSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
@@ -28,6 +28,8 @@ export default function ScanSettings() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -38,6 +40,7 @@ export default function ScanSettings() {
       setCvText((data as any).cv_text || '');
       setCvFilename((data as any).cv_filename || '');
     }
+    setEmail(user?.email || '');
     setProfileLoading(false);
   };
 
@@ -67,6 +70,21 @@ export default function ScanSettings() {
       toast.error(e.message || 'Failed to save');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangeEmail = async () => {
+    if (!email || email === user?.email) return;
+    setSavingEmail(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ email });
+      if (error) throw error;
+      await supabase.from('user_profiles').update({ email }).eq('id', user!.id);
+      toast.success('Confirmation email sent to your new address. Please check your inbox.');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to update email');
+    } finally {
+      setSavingEmail(false);
     }
   };
 
@@ -165,6 +183,34 @@ export default function ScanSettings() {
                   className="bg-secondary border-[hsl(var(--glass-border)/0.3)]"
                 />
                 <p className="text-xs text-muted-foreground">Shown in your dashboard greeting</p>
+              </div>
+
+              {/* Email */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
+                  Email Address
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="bg-secondary border-[hsl(var(--glass-border)/0.3)]"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={savingEmail || email === user?.email}
+                    onClick={handleChangeEmail}
+                    className="shrink-0 gap-1.5"
+                  >
+                    {savingEmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Update
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">A confirmation will be sent to your new email</p>
               </div>
 
               {/* City */}
