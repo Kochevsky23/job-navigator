@@ -25,7 +25,7 @@ export default function Jobs() {
   const [minScore, setMinScore] = useState(0);
 
   const fetchJobs = async () => {
-    const { data } = await supabase.from('jobs').select('*').order('created_at', { ascending: false });
+    const { data } = await db.from('jobs').select('*').order('created_at', { ascending: false });
     if (data) setJobs(data as unknown as Job[]);
     setLoading(false);
   };

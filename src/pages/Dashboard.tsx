@@ -18,8 +18,8 @@ export default function Dashboard() {
 
   const fetchData = async () => {
     const [jobsRes, scansRes] = await Promise.all([
-      supabase.from('jobs').select('*'),
-      supabase.from('scan_runs').select('*').order('started_at', { ascending: false }).limit(7),
+      db.from('jobs').select('*'),
+      db.from('scan_runs').select('*').order('started_at', { ascending: false }).limit(7),
     ]);
     if (jobsRes.data) setJobs(jobsRes.data as unknown as Job[]);
     if (scansRes.data) setScans(scansRes.data as unknown as ScanRun[]);
