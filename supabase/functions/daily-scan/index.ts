@@ -121,21 +121,43 @@ interface JobFromClaude {
 
 async function analyzeWithClaude(emails: string[], cvText: string): Promise<JobFromClaude[]> {
   const emailContent = emails.join("\n\n---\n\n");
-  const prompt = `You are a job scanning assistant for Dor Kochevsky, an Israeli student studying Industrial Engineering and Management.
+  const prompt = `You are a strict job-fit scoring assistant. Your task is to extract jobs from email alerts and score each one against the candidate's ACTUAL CV.
 
-Candidate CV content:
+STEP 1 — Read the CV below carefully. Extract:
+- Real experience level (years, internships, student jobs)
+- Actual technical skills listed
+- Education level and field
+- Languages spoken
+
+STEP 2 — Extract every unique job from the email alerts below.
+
+STEP 3 — For each job, score fit 1-10 using this STRICT rubric:
+- 9-10: PERFECT FIT — job explicitly targets students/graduates, matches CV skills exactly, no experience required
+- 7-8: GOOD FIT — entry level, 0-2 years exp, mostly matches CV skills and field
+- 5-6: POSSIBLE FIT — junior but not explicit about students, partial skills match
+- 3-4: WEAK FIT — some experience required (1-3 years), or field is tangential to CV
+- 1-2: REJECTED — senior role, wrong field entirely, requires experience candidate clearly doesn't have
+
+BE STRICT. Most jobs should score 4-6. Only score 8+ if the job EXPLICITLY targets students or fresh graduates AND matches CV skills. Justify every score.
+
+STEP 4 — Assign priority based on score:
+- HIGH: score 7-10 (strong junior fit)
+- MEDIUM: score 5-6 (possible fit)
+- LOW: score 3-4 (weak fit)
+- REJECTED: score 1-2 (filtered out)
+
+STEP 5 — Auto-REJECT (score 1, priority REJECTED) if:
+- Title contains Senior/Lead/Principal/Manager/Director/Head/Staff/Architect
+- Requires 3+ years experience
+- Completely unrelated to data/analytics/operations/IE/business analysis/project management
+
+For each job provide: company, role, location, job_link (actual URL if found, empty string if not), exp_required, reason (1-2 sentences justifying the score specifically referencing CV content).
+
+===== CANDIDATE CV =====
 ${cvText}
 
-Recent Gmail Job Alerts:
+===== RECENT JOB ALERT EMAILS =====
 ${emailContent}
-
-Instructions:
-1. Extract every unique job from the last 24 hours
-2. For each job identify: company, role, location, job_link, exp_required
-3. REJECT if: title contains Senior/Lead/Principal/Manager/Director/Head, requires 2+ years experience, unrelated to data/analytics/ops/IE/business analysis
-4. Score fit 1-10 based on CV match
-5. priority: HIGH=strong junior fit, MEDIUM=possible fit, LOW=weak fit, REJECTED=filtered out
-6. reason = one short sentence
 
 Return ONLY valid JSON:
 {
