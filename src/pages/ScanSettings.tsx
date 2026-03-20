@@ -152,6 +152,21 @@ export default function ScanSettings() {
             </div>
           ) : (
             <>
+              {/* Full Name */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  Full Name
+                </label>
+                <Input
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. John Smith"
+                  className="bg-secondary border-[hsl(var(--glass-border)/0.3)]"
+                />
+                <p className="text-xs text-muted-foreground">Shown in your dashboard greeting</p>
+              </div>
+
               {/* City */}
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-1.5">
