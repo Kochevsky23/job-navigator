@@ -227,6 +227,47 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* Upcoming Deadlines */}
+      {(() => {
+        const upcoming = jobs
+          .filter(j => j.deadline && new Date(j.deadline) >= new Date() && j.status !== 'Rejected')
+          .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())
+          .slice(0, 5);
+        if (upcoming.length === 0) return null;
+        return (
+          <div className="animate-fade-up" style={{ animationDelay: '360ms' }}>
+            <h2 className="text-lg font-display font-semibold mb-3 flex items-center gap-2">
+              <CalendarClock className="h-5 w-5 text-[hsl(var(--warning))]" />
+              Upcoming Deadlines
+            </h2>
+            <div className="glass-card rounded-xl divide-y divide-[hsl(var(--glass-border)/0.2)]">
+              {upcoming.map(job => {
+                const daysLeft = Math.ceil((new Date(job.deadline!).getTime() - Date.now()) / 86400000);
+                const urgent = daysLeft <= 2;
+                return (
+                  <div
+                    key={job.id}
+                    onClick={() => setSelectedJob(job)}
+                    className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-[hsl(var(--primary)/0.04)] transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <CompanyLogo name={job.company} domain={job.company_domain} jobLink={job.job_link} size="sm" />
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">{job.role}</p>
+                        <p className="text-xs text-muted-foreground truncate">{job.company}</p>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-semibold tabular-nums shrink-0 ml-3 ${urgent ? 'text-destructive' : 'text-[hsl(var(--warning))]'}`}>
+                      {daysLeft === 0 ? 'Today' : daysLeft === 1 ? 'Tomorrow' : `${daysLeft} days`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Best Matches */}
       {topJobs.length > 0 && (
         <div className="animate-fade-up" style={{ animationDelay: '400ms' }}>
