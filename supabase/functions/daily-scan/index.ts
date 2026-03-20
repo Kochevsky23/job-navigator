@@ -537,10 +537,14 @@ Deno.serve(async (req) => {
         alert_date: new Date().toISOString(),
       });
 
-      // If unique constraint catches it, just skip
       if (insertError) {
-        if (insertError.code === "23505") continue;
-        console.error("Insert error:", insertError);
+        if (insertError.code === "23505") {
+          console.log(`SKIP unique constraint: ${job.company} — ${job.role}`);
+          skippedDetails.push({ company: job.company, role: job.role, reason: "duplicate_constraint" });
+        } else {
+          console.error(`SKIP insert error: ${job.company} — ${job.role}:`, insertError);
+          skippedDetails.push({ company: job.company, role: job.role, reason: `error: ${insertError.message}` });
+        }
       } else {
         jobsAdded++;
       }
