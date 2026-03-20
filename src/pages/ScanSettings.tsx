@@ -241,6 +241,48 @@ export default function ScanSettings() {
             </div>
           ) : (
             <>
+              {/* Profile Picture */}
+              <div className="flex items-center gap-5">
+                <div className="relative group">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="Profile"
+                      className="h-20 w-20 rounded-full object-cover border-2 border-[hsl(var(--glass-border)/0.4)]"
+                    />
+                  ) : (
+                    <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center border-2 border-[hsl(var(--glass-border)/0.4)]">
+                      <User className="h-8 w-8 text-primary/50" />
+                    </div>
+                  )}
+                  <button
+                    onClick={() => document.getElementById('avatar-input')?.click()}
+                    disabled={uploadingAvatar}
+                    className="absolute inset-0 rounded-full bg-background/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                  >
+                    {uploadingAvatar ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-foreground" />
+                    ) : (
+                      <Camera className="h-5 w-5 text-foreground" />
+                    )}
+                  </button>
+                  <input
+                    id="avatar-input"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleAvatarUpload(file);
+                    }}
+                  />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Profile Picture</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Hover to change · JPG, PNG, or WebP</p>
+                </div>
+              </div>
+
               {/* Full Name */}
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-1.5">
