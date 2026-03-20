@@ -66,12 +66,14 @@ export default function Navbar() {
             </NavLink>
           ))}
           <div className="flex items-center gap-2 ml-2 pl-2 border-l border-[hsl(var(--glass-border)/0.3)]">
-            <Avatar className="h-7 w-7">
-              {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile" />}
-              <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
-                {initials || <User className="h-3.5 w-3.5" />}
-              </AvatarFallback>
-            </Avatar>
+            <NavLink to="/settings" className="rounded-full transition-opacity hover:opacity-80 active:scale-95">
+              <Avatar className="h-7 w-7 cursor-pointer">
+                {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile" />}
+                <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
+                  {initials || <User className="h-3.5 w-3.5" />}
+                </AvatarFallback>
+              </Avatar>
+            </NavLink>
             <button
               onClick={handleLogout}
               className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
