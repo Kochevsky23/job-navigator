@@ -211,8 +211,30 @@ Return ONLY valid JSON with no trailing commas:
   try {
     parsed = JSON.parse(jsonStr);
   } catch (e: any) {
-    console.error("JSON parse failed, raw text:", jsonStr.substring(0, 500));
-    throw new Error("Failed to parse Claude JSON: " + e.message);
+    // Response was likely truncated — try to salvage by finding the last complete job object
+    console.error("JSON parse failed, attempting salvage. Error:", e.message);
+    
+    // Find the last complete "}" before the truncation point
+    const lastCompleteObj = jsonStr.lastIndexOf('"status": "New"');
+    if (lastCompleteObj > 0) {
+      // Find the closing brace of that object
+      const closingBrace = jsonStr.indexOf("}", lastCompleteObj);
+      if (closingBrace > 0) {
+        const salvaged = jsonStr.substring(0, closingBrace + 1) + "]}";
+        try {
+          parsed = JSON.parse(salvaged.replace(/,\s*([}\]])/g, "$1"));
+          console.log(`Salvaged ${parsed.jobs?.length || 0} jobs from truncated response`);
+        } catch {
+          // Last resort: try to extract individual job objects
+          console.error("Salvage also failed");
+          throw new Error("Failed to parse Claude JSON: " + e.message);
+        }
+      } else {
+        throw new Error("Failed to parse Claude JSON: " + e.message);
+      }
+    } else {
+      throw new Error("Failed to parse Claude JSON: " + e.message);
+    }
   }
   
   return parsed.jobs || [];
