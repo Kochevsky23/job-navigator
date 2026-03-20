@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut } from 'lucide-react';
+import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useState } from 'react';
 
 const links = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -12,6 +13,7 @@ const links = [
 export default function Navbar() {
   const { signOut } = useAuth();
   const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = async () => {
     await signOut();
@@ -20,14 +22,16 @@ export default function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 glass border-b-0 border-t-0 border-x-0 border-b border-[hsl(var(--glass-border)/0.3)]">
-      <div className="container flex h-14 items-center gap-6">
+      <div className="container flex h-14 items-center gap-4">
         <NavLink to="/dashboard" className="flex items-center gap-2.5 font-display text-lg font-bold group">
           <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center shadow-md">
             <Compass className="h-4.5 w-4.5 text-background" />
           </div>
-          <span className="gradient-text">Job Compass</span>
+          <span className="gradient-text hidden sm:inline">Job Compass</span>
         </NavLink>
-        <div className="flex items-center gap-1 ml-auto">
+
+        {/* Desktop nav */}
+        <div className="hidden md:flex items-center gap-1 ml-auto">
           {links.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
@@ -41,19 +45,56 @@ export default function Navbar() {
               }
             >
               <Icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{label}</span>
+              {label}
             </NavLink>
           ))}
           <button
             onClick={handleLogout}
             className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200 ml-1"
-            title="Sign out"
           >
             <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline">Logout</span>
+            Logout
           </button>
         </div>
+
+        {/* Mobile hamburger */}
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          className="md:hidden ml-auto p-2 rounded-lg hover:bg-[hsl(var(--glass-border)/0.3)] transition-colors"
+        >
+          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
       </div>
+
+      {/* Mobile menu */}
+      {mobileOpen && (
+        <div className="md:hidden glass border-t border-[hsl(var(--glass-border)/0.3)] px-4 py-3 space-y-1 animate-fade-up">
+          {links.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
+                  isActive
+                    ? 'bg-[hsl(var(--primary)/0.12)] text-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--glass-border)/0.3)]'
+                }`
+              }
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </NavLink>
+          ))}
+          <button
+            onClick={() => { setMobileOpen(false); handleLogout(); }}
+            className="flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200 w-full"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </button>
+        </div>
+      )}
     </nav>
   );
 }

@@ -1,9 +1,10 @@
 import { Job } from '@/types/database';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, FileText, Loader2, Download } from 'lucide-react';
+import { ExternalLink, FileText, Loader2, Download, CheckCircle2, Send } from 'lucide-react';
 import { useState } from 'react';
 import { generateCV } from '@/lib/api';
+import { db } from '@/lib/supabase-external';
 import { toast } from 'sonner';
 import CompanyLogo from '@/components/CompanyLogo';
 
@@ -20,7 +21,6 @@ const priorityClass: Record<string, string> = {
   LOW: 'bg-priority-low priority-low border',
   REJECTED: 'bg-priority-rejected priority-rejected border',
 };
-
 
 function CircularScore({ score }: { score: number }) {
   const pct = (score / 10) * 100;
@@ -53,6 +53,7 @@ function CircularScore({ score }: { score: number }) {
 
 export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) {
   const [generating, setGenerating] = useState(false);
+  const [marking, setMarking] = useState(false);
 
   if (!job) return null;
 
@@ -68,6 +69,25 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
       setGenerating(false);
     }
   };
+
+  const handleMarkApplied = async () => {
+    setMarking(true);
+    try {
+      const { error } = await db.from('jobs').update({
+        status: 'Applied',
+        applied_at: new Date().toISOString(),
+      }).eq('id', job.id);
+      if (error) throw error;
+      toast.success('Marked as applied!');
+      onUpdate?.();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to update');
+    } finally {
+      setMarking(false);
+    }
+  };
+
+  const isApplied = job.status === 'Applied' || job.status === 'Interviewing' || job.status === 'Offer';
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
@@ -88,6 +108,11 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
             <div className="flex flex-wrap gap-2">
               <Badge className={priorityClass[job.priority]}>{job.priority}</Badge>
               <Badge variant="outline" className="border-[hsl(var(--glass-border)/0.5)]">{job.status}</Badge>
+              {job.applied_at && (
+                <Badge variant="outline" className="border-[hsl(var(--success)/0.3)] text-[hsl(var(--success))] text-xs">
+                  Applied {new Date(job.applied_at).toLocaleDateString()}
+                </Badge>
+              )}
             </div>
           </div>
 
@@ -105,6 +130,25 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
               <p className="mt-1 text-sm leading-relaxed" dir="auto">{job.reason}</p>
             </div>
           </div>
+
+          {/* Application tracking */}
+          {!isApplied && job.priority !== 'REJECTED' && (
+            <button
+              onClick={handleMarkApplied}
+              disabled={marking}
+              className="flex items-center justify-center gap-2 w-full rounded-xl border-2 border-[hsl(var(--success)/0.4)] bg-[hsl(var(--success)/0.06)] px-4 py-3 text-sm font-medium text-[hsl(var(--success))] hover:bg-[hsl(var(--success)/0.12)] transition-colors"
+            >
+              {marking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {marking ? 'Updating...' : 'Mark as Applied'}
+            </button>
+          )}
+
+          {isApplied && (
+            <div className="flex items-center gap-2 justify-center py-2 text-sm text-[hsl(var(--success))]">
+              <CheckCircle2 className="h-4 w-4" />
+              <span className="font-medium">Applied{job.applied_at ? ` on ${new Date(job.applied_at).toLocaleDateString()}` : ''}</span>
+            </div>
+          )}
 
           {/* Links */}
           <div className="space-y-2">

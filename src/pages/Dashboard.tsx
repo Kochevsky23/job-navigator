@@ -4,12 +4,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/supabase-external';
 import { runDailyScan } from '@/lib/api';
 import { Job, ScanRun } from '@/types/database';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, AlertTriangle, FileText, Loader2, Radar, ArrowRight, CheckCircle2, XCircle } from 'lucide-react';
+import { Briefcase, AlertTriangle, FileText, Loader2, Radar, ArrowRight, CheckCircle2, XCircle, Send, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
-
 import { format } from 'date-fns';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import JobDetailPanel from '@/components/JobDetailPanel';
 import CompanyLogo from '@/components/CompanyLogo';
 
@@ -19,7 +18,6 @@ const priorityClass: Record<string, string> = {
   LOW: 'bg-priority-low priority-low border',
   REJECTED: 'bg-priority-rejected priority-rejected border',
 };
-
 
 function ScoreBadge({ score }: { score: number }) {
   const cls = score >= 8 ? 'score-pill-high' : score >= 6 ? 'score-pill-medium' : 'score-pill-low';
@@ -36,6 +34,15 @@ function getGreeting() {
   if (h < 18) return 'Good afternoon';
   return 'Good evening';
 }
+
+const PRIORITY_COLORS: Record<string, string> = {
+  HIGH: 'hsl(155 100% 49%)',
+  MEDIUM: 'hsl(38 92% 50%)',
+  LOW: 'hsl(25 95% 53%)',
+  REJECTED: 'hsl(0 72% 51%)',
+};
+
+const SCORE_COLORS = ['hsl(0 72% 51%)', 'hsl(0 72% 51%)', 'hsl(0 72% 51%)', 'hsl(25 95% 53%)', 'hsl(25 95% 53%)', 'hsl(38 92% 50%)', 'hsl(38 92% 50%)', 'hsl(38 92% 50%)', 'hsl(155 100% 49%)', 'hsl(155 100% 49%)', 'hsl(155 100% 49%)'];
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -86,12 +93,24 @@ export default function Dashboard() {
   });
   const highPriority = jobs.filter(j => j.priority === 'HIGH').length;
   const cvsGenerated = jobs.filter(j => j.tailored_cv).length;
+  const appliedCount = jobs.filter(j => j.status === 'Applied' || j.status === 'Interviewing' || j.status === 'Offer').length;
   const lastScan = scans[0];
 
   const topJobs = [...todayJobs]
     .sort((a, b) => b.score - a.score)
     .filter(j => j.priority !== 'REJECTED')
     .slice(0, 5);
+
+  // Analytics data
+  const scoreDistribution = Array.from({ length: 11 }, (_, i) => ({
+    score: i.toString(),
+    count: jobs.filter(j => j.score === i).length,
+    fill: SCORE_COLORS[i],
+  })).filter(d => d.count > 0);
+
+  const priorityBreakdown = ['HIGH', 'MEDIUM', 'LOW', 'REJECTED']
+    .map(p => ({ name: p, value: jobs.filter(j => j.priority === p).length, color: PRIORITY_COLORS[p] }))
+    .filter(d => d.value > 0);
 
   if (loading) {
     return (
@@ -104,7 +123,8 @@ export default function Dashboard() {
   const stats = [
     { label: 'Jobs Today', value: todayJobs.length, icon: Briefcase, color: 'primary' as const },
     { label: 'High Priority', value: highPriority, icon: AlertTriangle, color: 'high' as const },
-    { label: 'CVs Generated', value: cvsGenerated, icon: FileText, color: 'accent' as const },
+    { label: 'Applied', value: appliedCount, icon: Send, color: 'accent' as const },
+    { label: 'CVs Generated', value: cvsGenerated, icon: FileText, color: 'primary' as const },
   ];
 
   const borderColorMap = {
@@ -120,11 +140,11 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="container py-8 space-y-8">
+    <div className="container py-6 md:py-8 space-y-6 md:space-y-8">
       {/* Hero */}
-      <div className="flex items-end justify-between animate-fade-up" style={{ animationDelay: '0ms' }}>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 animate-fade-up" style={{ animationDelay: '0ms' }}>
         <div>
-          <h1 className="text-3xl font-display font-bold tracking-tight" style={{ lineHeight: '1.1' }}>
+          <h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight" style={{ lineHeight: '1.1' }}>
             {getGreeting()}, <span className="gradient-text">{userName || 'there'}</span> 👋
           </h1>
           <p className="text-sm text-muted-foreground mt-1.5">
@@ -134,7 +154,7 @@ export default function Dashboard() {
         <button
           onClick={handleScan}
           disabled={scanning}
-          className={`btn-gradient flex items-center gap-2 text-base ${scanning ? '' : 'animate-pulse-glow'}`}
+          className={`btn-gradient flex items-center justify-center gap-2 text-base w-full sm:w-auto ${scanning ? '' : 'animate-pulse-glow'}`}
         >
           {scanning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Radar className="h-5 w-5" />}
           {scanning ? 'Scanning...' : 'Find New Jobs'}
@@ -142,18 +162,18 @@ export default function Dashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
         {stats.map((s, i) => (
           <div
             key={s.label}
-            className={`glass-card rounded-xl p-5 border-b-2 ${borderColorMap[s.color]} animate-fade-up`}
+            className={`glass-card rounded-xl p-4 md:p-5 border-b-2 ${borderColorMap[s.color]} animate-fade-up`}
             style={{ animationDelay: `${(i + 1) * 80}ms` }}
           >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{s.label}</span>
-              <s.icon className={`h-4 w-4 ${iconColorMap[s.color]} opacity-60`} />
+            <div className="flex items-center justify-between mb-2 md:mb-3">
+              <span className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wider">{s.label}</span>
+              <s.icon className={`h-3.5 w-3.5 md:h-4 md:w-4 ${iconColorMap[s.color]} opacity-60`} />
             </div>
-            <p className="text-3xl font-display font-bold tabular-nums">{s.value}</p>
+            <p className="text-2xl md:text-3xl font-display font-bold tabular-nums">{s.value}</p>
           </div>
         ))}
       </div>
@@ -191,12 +211,12 @@ export default function Dashboard() {
       {topJobs.length > 0 && (
         <div className="animate-fade-up" style={{ animationDelay: '400ms' }}>
           <h2 className="text-lg font-display font-semibold mb-4">Best Matches Today</h2>
-          <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2 snap-x snap-mandatory">
+          <div className="flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-2 px-2 snap-x snap-mandatory">
             {topJobs.map((job) => (
               <div
                 key={job.id}
                 onClick={() => setSelectedJob(job)}
-                className="glass-card glass-hover rounded-xl p-4 min-w-[220px] max-w-[260px] snap-start cursor-pointer flex flex-col gap-3"
+                className="glass-card glass-hover rounded-xl p-4 min-w-[200px] md:min-w-[220px] max-w-[260px] snap-start cursor-pointer flex flex-col gap-3"
               >
                 <div className="flex items-center gap-3">
                   <CompanyLogo name={job.company} domain={(job as any).company_domain} jobLink={job.job_link} />
@@ -219,6 +239,70 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Analytics */}
+      {jobs.length > 0 && (
+        <div className="animate-fade-up" style={{ animationDelay: '480ms' }}>
+          <h2 className="text-lg font-display font-semibold mb-4 flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-accent" />
+            Analytics
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Score Distribution */}
+            <div className="glass-card rounded-xl p-4 md:p-5">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">Score Distribution</h3>
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={scoreDistribution} barSize={20}>
+                  <XAxis dataKey="score" tick={{ fontSize: 11, fill: 'hsl(225 12% 50%)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: 'hsl(225 12% 50%)' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'hsl(232 22% 13%)', border: '1px solid hsl(232 18% 22%)', borderRadius: '8px', fontSize: '12px' }}
+                    labelStyle={{ color: 'hsl(220 15% 93%)' }}
+                    itemStyle={{ color: 'hsl(220 15% 93%)' }}
+                  />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {scoreDistribution.map((entry, idx) => (
+                      <Cell key={idx} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Priority Breakdown */}
+            <div className="glass-card rounded-xl p-4 md:p-5">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">Priority Breakdown</h3>
+              <div className="flex items-center gap-4">
+                <ResponsiveContainer width={120} height={120}>
+                  <PieChart>
+                    <Pie
+                      data={priorityBreakdown}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={50}
+                      dataKey="value"
+                      strokeWidth={0}
+                    >
+                      {priorityBreakdown.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-col gap-2">
+                  {priorityBreakdown.map(p => (
+                    <div key={p.name} className="flex items-center gap-2 text-xs">
+                      <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: p.color }} />
+                      <span className="text-muted-foreground">{p.name}</span>
+                      <span className="font-bold tabular-nums ml-auto">{p.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <JobDetailPanel
         job={selectedJob}
