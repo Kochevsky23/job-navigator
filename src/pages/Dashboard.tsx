@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/supabase-external';
 import { runDailyScan } from '@/lib/api';
 import { Job, ScanRun } from '@/types/database';
