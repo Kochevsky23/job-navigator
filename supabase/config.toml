@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.generate-cv]
 verify_jwt = false
+
+[functions.cleanup-duplicates]
+verify_jwt = false
