@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { formatDistanceToNow } from 'date-fns';
 import { db } from '@/lib/supabase-external';
 import { Job, Priority, JobStatus } from '@/types/database';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
