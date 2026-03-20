@@ -10,7 +10,13 @@ async function getAuthHeaders() {
   };
 }
 
-export async function runDailyScan(): Promise<{ jobs_found: number; jobs_added: number }> {
+export async function runDailyScan(): Promise<{
+  jobs_found: number;
+  jobs_added: number;
+  jobs_skipped_duplicate?: number;
+  jobs_skipped_error?: number;
+  skipped_details?: { company: string; role: string; reason: string }[];
+}> {
   const headers = await getAuthHeaders();
   const resp = await fetch(`${CLOUD_URL}/functions/v1/daily-scan`, {
     method: 'POST',
