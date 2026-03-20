@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/supabase-external';
 import { runDailyScan } from '@/lib/api';
 import { Job, ScanRun } from '@/types/database';
@@ -36,11 +38,13 @@ function getGreeting() {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [scans, setScans] = useState<ScanRun[]>([]);
   const [scanning, setScanning] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [userName, setUserName] = useState('');
 
   const fetchData = async () => {
     const [jobsRes, scansRes] = await Promise.all([
@@ -52,7 +56,15 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+    if (user) {
+      supabase.from('user_profiles').select('full_name').eq('id', user.id).single()
+        .then(({ data }) => {
+          if (data) setUserName((data as any).full_name?.split(' ')[0] || '');
+        });
+    }
+  }, [user]);
 
   const handleScan = async () => {
     setScanning(true);
@@ -113,7 +125,7 @@ export default function Dashboard() {
       <div className="flex items-end justify-between animate-fade-up" style={{ animationDelay: '0ms' }}>
         <div>
           <h1 className="text-3xl font-display font-bold tracking-tight" style={{ lineHeight: '1.1' }}>
-            {getGreeting()}, <span className="gradient-text">Dor</span> 👋
+            {getGreeting()}, <span className="gradient-text">{userName || 'there'}</span> 👋
           </h1>
           <p className="text-sm text-muted-foreground mt-1.5">
             {format(new Date(), 'EEEE, MMMM d, yyyy')}
