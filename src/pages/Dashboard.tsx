@@ -3,7 +3,6 @@ import { db } from '@/lib/supabase-external';
 import { runDailyScan } from '@/lib/api';
 import { Job, ScanRun } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Briefcase, AlertTriangle, FileText, Clock, Loader2, Radar, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,6 +16,35 @@ const priorityClass: Record<string, string> = {
   LOW: 'bg-priority-low priority-low border',
   REJECTED: 'bg-priority-rejected priority-rejected border',
 };
+
+function CompanyAvatar({ name }: { name: string }) {
+  const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const hue = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
+  return (
+    <div
+      className="h-10 w-10 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0"
+      style={{ background: `linear-gradient(135deg, hsl(${hue} 60% 45%), hsl(${(hue + 40) % 360} 70% 55%))` }}
+    >
+      {initials}
+    </div>
+  );
+}
+
+function ScoreBadge({ score }: { score: number }) {
+  const cls = score >= 8 ? 'score-pill-high' : score >= 6 ? 'score-pill-medium' : 'score-pill-low';
+  return (
+    <span className={`${cls} rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums`}>
+      {score}/10
+    </span>
+  );
+}
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
 
 export default function Dashboard() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -72,131 +100,152 @@ export default function Dashboard() {
     );
   }
 
+  const stats = [
+    { label: 'Jobs Today', value: todayJobs.length, icon: Briefcase, color: 'primary' as const },
+    { label: 'High Priority', value: highPriority, icon: AlertTriangle, color: 'high' as const },
+    { label: 'CVs Generated', value: cvsGenerated, icon: FileText, color: 'accent' as const },
+  ];
+
+  const borderColorMap = {
+    primary: 'border-b-primary',
+    high: 'border-b-[hsl(var(--priority-high))]',
+    accent: 'border-b-accent',
+  };
+
+  const iconColorMap = {
+    primary: 'text-primary',
+    high: 'text-[hsl(var(--priority-high))]',
+    accent: 'text-accent',
+  };
+
   return (
-    <div className="container py-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="container py-8 space-y-8">
+      {/* Hero */}
+      <div className="flex items-end justify-between animate-fade-up" style={{ animationDelay: '0ms' }}>
         <div>
-          <h1 className="text-2xl font-display font-bold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Welcome back, Dor 👋</p>
+          <h1 className="text-3xl font-display font-bold tracking-tight" style={{ lineHeight: '1.1' }}>
+            {getGreeting()}, <span className="gradient-text">Dor</span> 👋
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1.5">
+            {format(new Date(), 'EEEE, MMMM d, yyyy')}
+          </p>
         </div>
-        <Button onClick={handleScan} disabled={scanning} size="lg" className="gap-2">
+        <button
+          onClick={handleScan}
+          disabled={scanning}
+          className={`btn-gradient flex items-center gap-2 text-base ${scanning ? '' : 'animate-pulse-glow'}`}
+        >
           {scanning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Radar className="h-5 w-5" />}
           {scanning ? 'Scanning...' : 'Find New Jobs'}
-        </Button>
+        </button>
       </div>
 
+      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Jobs Today</CardTitle>
-            <Briefcase className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-display font-bold">{todayJobs.length}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">High Priority</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-success" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-display font-bold priority-high">{highPriority}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">CVs Generated</CardTitle>
-            <FileText className="h-4 w-4 text-accent" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-display font-bold">{cvsGenerated}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Last Scan</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {lastScan ? (
-              <div>
-                <p className="text-sm font-medium">
-                  {format(new Date(lastScan.started_at), 'MMM d, HH:mm')}
-                </p>
-                <Badge variant={lastScan.success ? 'default' : 'destructive'} className="mt-1 text-xs">
-                  {lastScan.success ? 'Success' : 'Failed'}
-                </Badge>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No scans yet</p>
-            )}
-          </CardContent>
-        </Card>
+        {stats.map((s, i) => (
+          <div
+            key={s.label}
+            className={`glass-card rounded-xl p-5 border-b-2 ${borderColorMap[s.color]} animate-fade-up`}
+            style={{ animationDelay: `${(i + 1) * 80}ms` }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{s.label}</span>
+              <s.icon className={`h-4 w-4 ${iconColorMap[s.color]} opacity-60`} />
+            </div>
+            <p className="text-3xl font-display font-bold tabular-nums">{s.value}</p>
+          </div>
+        ))}
+        <div
+          className="glass-card rounded-xl p-5 border-b-2 border-b-muted-foreground/30 animate-fade-up"
+          style={{ animationDelay: '320ms' }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Last Scan</span>
+            <Clock className="h-4 w-4 text-muted-foreground opacity-60" />
+          </div>
+          {lastScan ? (
+            <div>
+              <p className="text-sm font-semibold">
+                {format(new Date(lastScan.started_at), 'MMM d, HH:mm')}
+              </p>
+              <Badge
+                variant={lastScan.success ? 'default' : 'destructive'}
+                className="mt-1.5 text-xs"
+              >
+                {lastScan.success ? 'Success' : 'Failed'}
+              </Badge>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No scans yet</p>
+          )}
+        </div>
       </div>
 
+      {/* Best Matches */}
       {topJobs.length > 0 && (
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle className="font-display">Best Matches Today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-              {topJobs.map((job) => (
-                <Card
-                  key={job.id}
-                  className="bg-secondary/30 border-border cursor-pointer hover:bg-secondary/60 transition-colors"
-                  onClick={() => setSelectedJob(job)}
-                >
-                  <CardContent className="p-4 space-y-2">
-                    <p className="font-medium text-sm truncate" dir="auto">{job.company}</p>
+        <div className="animate-fade-up" style={{ animationDelay: '400ms' }}>
+          <h2 className="text-lg font-display font-semibold mb-4">Best Matches Today</h2>
+          <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2 snap-x snap-mandatory">
+            {topJobs.map((job) => (
+              <div
+                key={job.id}
+                onClick={() => setSelectedJob(job)}
+                className="glass-card glass-hover rounded-xl p-4 min-w-[220px] max-w-[260px] snap-start cursor-pointer flex flex-col gap-3"
+              >
+                <div className="flex items-center gap-3">
+                  <CompanyAvatar name={job.company} />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm truncate" dir="auto">{job.company}</p>
                     <p className="text-xs text-muted-foreground truncate" dir="auto">{job.role}</p>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="text-xs">
-                        {job.score}/10
-                      </Badge>
-                      <Badge className={`${priorityClass[job.priority]} text-xs`}>{job.priority}</Badge>
-                    </div>
-                    <Button variant="ghost" size="sm" className="w-full mt-1 text-xs gap-1">
-                      View <ArrowRight className="h-3 w-3" />
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ScoreBadge score={job.score} />
+                  <Badge className={`${priorityClass[job.priority]} text-xs`}>{job.priority}</Badge>
+                </div>
+                <button className="flex items-center justify-center gap-1.5 text-xs font-medium text-accent hover:text-accent/80 transition-colors mt-auto group">
+                  View details
+                  <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="font-display">Recent Scans</CardTitle>
-        </CardHeader>
-        <CardContent>
+      {/* Recent Scans */}
+      <div className="animate-fade-up" style={{ animationDelay: '500ms' }}>
+        <h2 className="text-lg font-display font-semibold mb-4">Recent Scans</h2>
+        <div className="glass-card rounded-xl overflow-hidden">
           {scans.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No scan history yet. Run your first scan!</p>
+            <p className="text-muted-foreground text-sm p-6">No scan history yet. Run your first scan!</p>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Jobs Found</TableHead>
-                  <TableHead>Jobs Added</TableHead>
-                  <TableHead>Error</TableHead>
+                <TableRow className="border-b border-[hsl(var(--glass-border)/0.3)]">
+                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Time</TableHead>
+                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Found</TableHead>
+                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Added</TableHead>
+                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Error</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {scans.map((s) => (
-                  <TableRow key={s.id}>
+                  <TableRow key={s.id} className="border-b border-[hsl(var(--glass-border)/0.2)] hover:bg-[hsl(var(--glass-border)/0.15)] transition-colors">
                     <TableCell className="text-sm">{format(new Date(s.started_at), 'MMM d, HH:mm')}</TableCell>
                     <TableCell>
-                      <Badge variant={s.success ? 'default' : 'destructive'} className="text-xs">
-                        {s.success ? '✓ Success' : '✗ Failed'}
-                      </Badge>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        s.success
+                          ? 'bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]'
+                          : 'bg-[hsl(var(--destructive)/0.12)] text-destructive'
+                      }`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${s.success ? 'bg-[hsl(var(--success))]' : 'bg-destructive'}`} />
+                        {s.success ? 'Success' : 'Failed'}
+                      </span>
                     </TableCell>
-                    <TableCell>{s.jobs_found}</TableCell>
-                    <TableCell>{s.jobs_added}</TableCell>
+                    <TableCell className="tabular-nums">{s.jobs_found}</TableCell>
+                    <TableCell className="tabular-nums">{s.jobs_added}</TableCell>
                     <TableCell className="text-xs text-destructive max-w-[200px] truncate">
                       {s.error_text || '—'}
                     </TableCell>
@@ -205,8 +254,8 @@ export default function Dashboard() {
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <JobDetailPanel
         job={selectedJob}

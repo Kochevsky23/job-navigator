@@ -3,15 +3,15 @@ import { db } from '@/lib/supabase-external';
 import { Job, JobStatus } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Loader2, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 
-const COLUMNS: { id: JobStatus; label: string; color: string }[] = [
-  { id: 'New', label: 'New', color: 'bg-primary/10 border-primary/30' },
-  { id: 'Applied', label: 'Applied', color: 'bg-accent/10 border-accent/30' },
-  { id: 'Interviewing', label: 'Interviewing', color: 'bg-warning/10 border-warning/30' },
-  { id: 'Offer', label: 'Offer', color: 'bg-success/10 border-success/30' },
-  { id: 'Rejected', label: 'Rejected', color: 'bg-destructive/10 border-destructive/30' },
+const COLUMNS: { id: JobStatus; label: string; borderColor: string }[] = [
+  { id: 'New', label: 'New', borderColor: 'border-t-accent' },
+  { id: 'Applied', label: 'Applied', borderColor: 'border-t-[hsl(var(--info))]' },
+  { id: 'Interviewing', label: 'Interviewing', borderColor: 'border-t-[hsl(var(--warning))]' },
+  { id: 'Offer', label: 'Offer', borderColor: 'border-t-[hsl(var(--success))]' },
+  { id: 'Rejected', label: 'Rejected', borderColor: 'border-t-destructive' },
 ];
 
 const priorityDot: Record<string, string> = {
@@ -20,6 +20,15 @@ const priorityDot: Record<string, string> = {
   LOW: 'bg-[hsl(var(--priority-low))]',
   REJECTED: 'bg-[hsl(var(--priority-rejected))]',
 };
+
+function ScorePill({ score }: { score: number }) {
+  const cls = score >= 8 ? 'score-pill-high' : score >= 6 ? 'score-pill-medium' : 'score-pill-low';
+  return (
+    <span className={`${cls} rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums`}>
+      {score}/10
+    </span>
+  );
+}
 
 export default function Pipeline() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -61,11 +70,11 @@ export default function Pipeline() {
   }
 
   return (
-    <div className="container py-6 space-y-4">
-      <h1 className="text-2xl font-display font-bold">Pipeline</h1>
+    <div className="container py-8 space-y-5">
+      <h1 className="text-2xl font-display font-bold animate-fade-up">Pipeline</h1>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 min-h-[60vh]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 min-h-[60vh] animate-fade-up" style={{ animationDelay: '100ms' }}>
           {COLUMNS.map((col) => {
             const colJobs = jobs.filter(j => j.status === col.id);
             return (
@@ -74,13 +83,15 @@ export default function Pipeline() {
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`rounded-lg border p-3 transition-colors ${col.color} ${
-                      snapshot.isDraggingOver ? 'ring-2 ring-primary/40' : ''
+                    className={`glass-card rounded-xl border-t-2 ${col.borderColor} p-3 transition-all duration-200 ${
+                      snapshot.isDraggingOver ? 'ring-1 ring-primary/30 bg-[hsl(var(--primary)/0.03)]' : ''
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-3 px-1">
                       <h3 className="text-sm font-display font-semibold">{col.label}</h3>
-                      <Badge variant="secondary" className="text-xs">{colJobs.length}</Badge>
+                      <span className="text-xs text-muted-foreground tabular-nums bg-[hsl(var(--glass-border)/0.3)] rounded-full px-2 py-0.5">
+                        {colJobs.length}
+                      </span>
                     </div>
                     <div className="space-y-2 min-h-[100px]">
                       {colJobs.map((job, index) => (
@@ -89,23 +100,21 @@ export default function Pipeline() {
                             <div
                               ref={provided.innerRef}
                               {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`rounded-md border border-border bg-card p-3 space-y-1 transition-shadow ${
-                                snapshot.isDragging ? 'shadow-lg shadow-primary/20 ring-1 ring-primary/30' : ''
+                              className={`rounded-lg border border-[hsl(var(--glass-border)/0.3)] bg-[hsl(var(--card))] p-3 space-y-1.5 transition-all duration-200 ${
+                                snapshot.isDragging ? 'shadow-xl shadow-primary/10 ring-1 ring-primary/20 scale-[1.02]' : 'hover:shadow-md hover:shadow-black/15 hover:-translate-y-px'
                               }`}
                             >
                               <div className="flex items-center gap-2">
-                                <div className={`h-2 w-2 rounded-full ${priorityDot[job.priority]}`} />
+                                <div {...provided.dragHandleProps} className="text-muted-foreground/40 hover:text-muted-foreground transition-colors cursor-grab">
+                                  <GripVertical className="h-3.5 w-3.5" />
+                                </div>
+                                <div className={`h-2 w-2 rounded-full ${priorityDot[job.priority]} shrink-0`} />
                                 <span className="text-sm font-medium truncate" dir="auto">{job.company}</span>
                               </div>
-                              <p className="text-xs text-muted-foreground truncate" dir="auto">{job.role}</p>
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-muted-foreground">{job.location}</span>
-                                <span className={`text-xs font-bold ${
-                                  job.score >= 7 ? 'priority-high' : job.score >= 4 ? 'priority-medium' : 'priority-low'
-                                }`}>
-                                  {job.score}/10
-                                </span>
+                              <p className="text-xs text-muted-foreground truncate pl-[22px]" dir="auto">{job.role}</p>
+                              <div className="flex items-center justify-between pl-[22px]">
+                                <span className="text-[11px] text-muted-foreground/70 truncate" dir="auto">{job.location}</span>
+                                <ScorePill score={job.score} />
                               </div>
                             </div>
                           )}

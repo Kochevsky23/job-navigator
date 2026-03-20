@@ -1,8 +1,7 @@
 import { Job } from '@/types/database';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, FileText, Loader2 } from 'lucide-react';
+import { ExternalLink, FileText, Loader2, Download } from 'lucide-react';
 import { useState } from 'react';
 import { generateCV } from '@/lib/api';
 import { toast } from 'sonner';
@@ -20,6 +19,48 @@ const priorityClass: Record<string, string> = {
   LOW: 'bg-priority-low priority-low border',
   REJECTED: 'bg-priority-rejected priority-rejected border',
 };
+
+function CompanyAvatar({ name }: { name: string }) {
+  const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const hue = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
+  return (
+    <div
+      className="h-14 w-14 rounded-2xl flex items-center justify-center text-lg font-bold text-white shrink-0"
+      style={{ background: `linear-gradient(135deg, hsl(${hue} 60% 45%), hsl(${(hue + 40) % 360} 70% 55%))` }}
+    >
+      {initials}
+    </div>
+  );
+}
+
+function CircularScore({ score }: { score: number }) {
+  const pct = (score / 10) * 100;
+  const radius = 36;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (pct / 100) * circumference;
+  const color = score >= 8 ? 'hsl(155 100% 49%)' : score >= 6 ? 'hsl(38 92% 50%)' : 'hsl(0 72% 51%)';
+
+  return (
+    <div className="relative h-24 w-24 shrink-0">
+      <svg className="h-24 w-24 -rotate-90" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r={radius} fill="none" stroke="hsl(232 18% 20%)" strokeWidth="5" />
+        <circle
+          cx="40" cy="40" r={radius} fill="none"
+          stroke={color}
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="transition-all duration-700 ease-out"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-2xl font-display font-bold tabular-nums" style={{ color }}>{score}</span>
+        <span className="text-[10px] text-muted-foreground">/10</span>
+      </div>
+    </div>
+  );
+}
 
 export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) {
   const [generating, setGenerating] = useState(false);
@@ -41,76 +82,86 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-full sm:max-w-lg bg-card border-border overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle className="font-display text-xl">{job.role}</SheetTitle>
-          <p className="text-muted-foreground">{job.company}</p>
-        </SheetHeader>
-
-        <div className="mt-6 space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Badge className={priorityClass[job.priority]}>{job.priority}</Badge>
-            <Badge variant="outline">{job.status}</Badge>
-            <Badge variant="secondary">Score: {job.score}/10</Badge>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <span className="text-muted-foreground">Location</span>
-              <p dir="auto">{job.location}</p>
+      <SheetContent className="w-full sm:max-w-lg glass border-l border-[hsl(var(--glass-border)/0.4)] overflow-y-auto p-0">
+        <div className="p-6 space-y-6">
+          <SheetHeader className="space-y-0">
+            <div className="flex items-start gap-4">
+              <CompanyAvatar name={job.company} />
+              <div className="min-w-0 pt-1">
+                <SheetTitle className="font-display text-xl leading-tight">{job.role}</SheetTitle>
+                <p className="text-muted-foreground text-sm mt-0.5">{job.company}</p>
+              </div>
             </div>
-            <div>
-              <span className="text-muted-foreground">Experience</span>
-              <p dir="auto">{job.exp_required || 'N/A'}</p>
-            </div>
-            <div className="col-span-2">
-              <span className="text-muted-foreground">Reason</span>
-              <p dir="auto">{job.reason}</p>
+          </SheetHeader>
+
+          <div className="flex items-center gap-4">
+            <CircularScore score={job.score} />
+            <div className="flex flex-wrap gap-2">
+              <Badge className={priorityClass[job.priority]}>{job.priority}</Badge>
+              <Badge variant="outline" className="border-[hsl(var(--glass-border)/0.5)]">{job.status}</Badge>
             </div>
           </div>
 
-          {job.job_link && !job.job_link.includes('linkedin.com') ? (
-            <a
-              href={job.job_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center w-full rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              <ExternalLink className="h-4 w-4 mr-2" /> View on Company Site
-            </a>
-          ) : job.linkedin_id ? (
-            <a
-              href={`https://www.linkedin.com/jobs/view/${job.linkedin_id}/`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center w-full rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              <ExternalLink className="h-4 w-4 mr-2" /> View on LinkedIn
-            </a>
-          ) : null}
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="glass-card rounded-lg p-3">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">Location</span>
+              <p className="font-medium mt-0.5" dir="auto">{job.location}</p>
+            </div>
+            <div className="glass-card rounded-lg p-3">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">Experience</span>
+              <p className="font-medium mt-0.5" dir="auto">{job.exp_required || 'N/A'}</p>
+            </div>
+            <div className="col-span-2 glass-card rounded-lg p-3">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">Reason</span>
+              <p className="mt-1 text-sm leading-relaxed" dir="auto">{job.reason}</p>
+            </div>
+          </div>
 
-          {job.job_link && !job.job_link.includes('linkedin.com') && job.linkedin_id && (
-            <a
-              href={`https://www.linkedin.com/jobs/view/${job.linkedin_id}/`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center w-full rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              <ExternalLink className="h-4 w-4 mr-2" /> View on LinkedIn
-            </a>
-          )}
+          {/* Links */}
+          <div className="space-y-2">
+            {job.job_link && !job.job_link.includes('linkedin.com') ? (
+              <a
+                href={job.job_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-gradient flex items-center justify-center gap-2 w-full rounded-xl text-sm"
+              >
+                <ExternalLink className="h-4 w-4" /> View on Company Site
+              </a>
+            ) : job.linkedin_id ? (
+              <a
+                href={`https://www.linkedin.com/jobs/view/${job.linkedin_id}/`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-gradient flex items-center justify-center gap-2 w-full rounded-xl text-sm"
+              >
+                <ExternalLink className="h-4 w-4" /> View on LinkedIn
+              </a>
+            ) : null}
 
+            {job.job_link && !job.job_link.includes('linkedin.com') && job.linkedin_id && (
+              <a
+                href={`https://www.linkedin.com/jobs/view/${job.linkedin_id}/`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full rounded-xl border border-[hsl(var(--glass-border)/0.5)] bg-transparent px-4 py-3 text-sm font-medium text-accent hover:bg-[hsl(var(--accent)/0.08)] transition-colors"
+              >
+                <ExternalLink className="h-4 w-4" /> View on LinkedIn
+              </a>
+            )}
+          </div>
+
+          {/* CV */}
           {job.tailored_cv ? (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-primary flex items-center gap-1">
-                <FileText className="h-4 w-4" /> Tailored CV Ready
-              </p>
-              <div className="max-h-60 overflow-y-auto rounded-lg bg-secondary p-3 text-xs whitespace-pre-wrap font-mono" dir="auto">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                <p className="text-sm font-semibold text-primary">Tailored CV Ready</p>
+              </div>
+              <div className="max-h-60 overflow-y-auto rounded-xl glass-card p-4 text-xs whitespace-pre-wrap font-mono leading-relaxed" dir="auto">
                 {job.tailored_cv}
               </div>
-              <Button
-                variant="outline"
-                size="sm"
+              <button
                 onClick={() => {
                   const blob = new Blob([job.tailored_cv!], { type: 'text/plain' });
                   const url = URL.createObjectURL(blob);
@@ -120,15 +171,20 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
                   a.click();
                   URL.revokeObjectURL(url);
                 }}
+                className="flex items-center justify-center gap-2 w-full rounded-xl border border-[hsl(var(--glass-border)/0.5)] px-4 py-2.5 text-sm font-medium hover:bg-[hsl(var(--glass-border)/0.2)] transition-colors"
               >
-                Download CV
-              </Button>
+                <Download className="h-4 w-4" /> Download CV
+              </button>
             </div>
           ) : job.score > 6 && job.priority !== 'REJECTED' ? (
-            <Button onClick={handleGenerateCV} disabled={generating} className="w-full">
-              {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+            <button
+              onClick={handleGenerateCV}
+              disabled={generating}
+              className="btn-gradient flex items-center justify-center gap-2 w-full rounded-xl text-sm"
+            >
+              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
               {generating ? 'Generating CV...' : 'Generate Tailored CV'}
-            </Button>
+            </button>
           ) : null}
         </div>
       </SheetContent>
