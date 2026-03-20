@@ -380,6 +380,7 @@ Deno.serve(async (req) => {
 
   let jobsFound = 0;
   let jobsAdded = 0;
+  const skippedDetails: { company: string; role: string; reason: string }[] = [];
 
   try {
     // 1. Get Google access token (shared credentials)
