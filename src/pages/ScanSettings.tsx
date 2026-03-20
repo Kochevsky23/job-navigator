@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Radar, Mail, Brain, FileText, Clock, Upload, User, MapPin, Save, CheckCircle2, AtSign, Lock } from 'lucide-react';
+import { Loader2, Radar, Mail, Brain, FileText, Clock, Upload, User, MapPin, Save, CheckCircle2, AtSign, Lock, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
@@ -34,6 +34,8 @@ export default function ScanSettings() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -43,6 +45,7 @@ export default function ScanSettings() {
       setCity((data as any).city || '');
       setCvText((data as any).cv_text || '');
       setCvFilename((data as any).cv_filename || '');
+      setAvatarUrl((data as any).avatar_url || '');
     }
     setEmail(user?.email || '');
     setProfileLoading(false);
@@ -167,6 +170,45 @@ export default function ScanSettings() {
     }
   }, [user]);
 
+  const handleAvatarUpload = async (file: File) => {
+    if (!user) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+    setUploadingAvatar(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const filePath = `${user.id}/avatar.${ext}`;
+      
+      // Remove old avatar if exists
+      await supabase.storage.from('avatars').remove([filePath]);
+      
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // Add cache-buster
+      const url = `${publicUrl}?t=${Date.now()}`;
+      
+      await supabase.from('user_profiles').update({
+        avatar_url: url,
+      }).eq('id', user.id);
+
+      setAvatarUrl(url);
+      toast.success('Profile picture updated!');
+    } catch (e: any) {
+      toast.error(e.message || 'Upload failed');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleScan = async () => {
     setScanning(true);
     try {
@@ -199,6 +241,48 @@ export default function ScanSettings() {
             </div>
           ) : (
             <>
+              {/* Profile Picture */}
+              <div className="flex items-center gap-5">
+                <div className="relative group">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="Profile"
+                      className="h-20 w-20 rounded-full object-cover border-2 border-[hsl(var(--glass-border)/0.4)]"
+                    />
+                  ) : (
+                    <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center border-2 border-[hsl(var(--glass-border)/0.4)]">
+                      <User className="h-8 w-8 text-primary/50" />
+                    </div>
+                  )}
+                  <button
+                    onClick={() => document.getElementById('avatar-input')?.click()}
+                    disabled={uploadingAvatar}
+                    className="absolute inset-0 rounded-full bg-background/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                  >
+                    {uploadingAvatar ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-foreground" />
+                    ) : (
+                      <Camera className="h-5 w-5 text-foreground" />
+                    )}
+                  </button>
+                  <input
+                    id="avatar-input"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleAvatarUpload(file);
+                    }}
+                  />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Profile Picture</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Hover to change · JPG, PNG, or WebP</p>
+                </div>
+              </div>
+
               {/* Full Name */}
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-1.5">
