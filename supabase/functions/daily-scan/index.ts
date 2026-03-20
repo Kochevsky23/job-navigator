@@ -365,11 +365,13 @@ Deno.serve(async (req) => {
     // 5. Post-process: enforce hard scoring rules
     const SENIOR_TITLES = /\b(senior|lead|principal|manager|director|head|vp|staff|architect)\b/i;
     const HIGH_EXP = /\b(3\+|4\+|5\+|6\+|7\+|8\+|3-5|5-7|3 years|4 years|5 years)\b/i;
-    const RELEVANT_FIELDS = /\b(data|analy|operations|business|project.?manag|supply.?chain|logistics|industrial.?engineer|BI|reporting|excel|sql|python|planning|procurement)\b/i;
+    const RELEVANT_FIELDS = /\b(data|analy|operations|business|project.?manag|supply.?chain|logistics|industrial.?engineer|BI|reporting|excel|sql|python|planning|procurement|product)\b/i;
+    const REMOTE_JOB = /\b(remote|עבודה מרחוק|work from home|WFH)\b/i;
 
     for (const job of jobs) {
       const title = (job.role || '').trim();
       const exp = (job.exp_required || '').trim();
+      const location = (job.location || '').trim();
 
       // Hard rule: senior titles → max score 3, REJECTED
       if (SENIOR_TITLES.test(title)) {
@@ -386,6 +388,14 @@ Deno.serve(async (req) => {
         job.priority = "REJECTED";
         if (!job.reason.includes("experience")) {
           job.reason = `Score ${job.score} — requires ${exp} experience, Dor is a 3rd year student. ${job.reason}`;
+        }
+      }
+
+      // Hard rule: remote jobs → REJECTED
+      if (REMOTE_JOB.test(location) || REMOTE_JOB.test(title)) {
+        job.priority = "REJECTED";
+        if (!job.reason.includes("remote")) {
+          job.reason = `${job.reason} [Remote job — auto-rejected per policy.]`;
         }
       }
 
