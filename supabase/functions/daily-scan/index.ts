@@ -120,7 +120,11 @@ interface JobFromClaude {
 }
 
 async function analyzeWithClaude(emails: string[], cvText: string): Promise<JobFromClaude[]> {
-  const emailContent = emails.join("\n\n---\n\n");
+  // Truncate inputs to keep token count manageable
+  const truncatedCV = cvText.length > 6000 ? cvText.substring(0, 6000) + "\n[CV TRUNCATED]" : cvText;
+  const truncatedEmails = emails.map(e => e.length > 3000 ? e.substring(0, 3000) + "\n[EMAIL TRUNCATED]" : e);
+  const emailContent = truncatedEmails.join("\n\n---\n\n");
+
   const prompt = `You are a strict job-fit scoring assistant. Your task is to extract jobs from email alerts and score each one against the candidate's ACTUAL CV.
 
 STEP 1 — Read the CV below carefully. Extract:
@@ -129,7 +133,7 @@ STEP 1 — Read the CV below carefully. Extract:
 - Education level and field
 - Languages spoken
 
-STEP 2 — Extract every unique job from the email alerts below.
+STEP 2 — Extract up to 15 unique jobs from the email alerts below. If there are more than 15, pick the most relevant ones.
 
 STEP 3 — For each job, score fit 1-10 using this STRICT rubric:
 - 9-10: PERFECT FIT — job explicitly targets students/graduates, matches CV skills exactly, no experience required
@@ -154,12 +158,12 @@ STEP 5 — Auto-REJECT (score 1, priority REJECTED) if:
 For each job provide: company, role, location, job_link (actual URL if found, empty string if not), exp_required, reason (1-2 sentences justifying the score specifically referencing CV content).
 
 ===== CANDIDATE CV =====
-${cvText}
+${truncatedCV}
 
 ===== RECENT JOB ALERT EMAILS =====
 ${emailContent}
 
-Return ONLY valid JSON:
+Return ONLY valid JSON with no trailing commas:
 {
   "jobs": [{
     "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "reason": "", "status": "New"
