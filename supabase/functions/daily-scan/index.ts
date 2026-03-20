@@ -227,9 +227,9 @@ Deno.serve(async (req) => {
 
     // 5. Upsert jobs with deduplication
     for (const job of jobs) {
-      const fingerprint = job.job_link
-        ? `link::${job.job_link}`
-        : `meta::${job.company}__${job.role}__${job.location}`;
+      const fingerprint = job.job_link?.trim()
+        ? `link::${job.job_link.trim().toLowerCase()}`
+        : `meta::${(job.company || '').trim().toLowerCase()}__${(job.role || '').trim().toLowerCase()}__${(job.location || '').trim().toLowerCase()}`;
 
       const { data: existing } = await supabase
         .from("jobs")
