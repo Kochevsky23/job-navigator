@@ -513,7 +513,11 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      if (byCompanyRole) continue;
+      if (byCompanyRole) {
+        console.log(`SKIP duplicate company+role: ${job.company} — ${job.role}`);
+        skippedDetails.push({ company: job.company, role: job.role, reason: "duplicate_company_role" });
+        continue;
+      }
 
       // New job — insert
       const { error: insertError } = await supabase.from("jobs").insert({
