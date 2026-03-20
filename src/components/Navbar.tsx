@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 
 const links = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -21,14 +21,18 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState('');
   const [initials, setInitials] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
 
   useEffect(() => {
     if (user) {
-      supabase.from('user_profiles').select('avatar_url, full_name').eq('id', user.id).single()
+      supabase.from('user_profiles').select('avatar_url, full_name, email').eq('id', user.id).single()
         .then(({ data }) => {
           if (data) {
             setAvatarUrl((data as any).avatar_url || '');
             const name = (data as any).full_name || '';
+            setFullName(name);
+            setEmail((data as any).email || user.email || '');
             setInitials(name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase());
           }
         });
@@ -82,7 +86,22 @@ export default function Navbar() {
                   </Avatar>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="font-normal pb-2">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-9 w-9">
+                      {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile" />}
+                      <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">
+                        {initials || <User className="h-4 w-4" />}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{fullName || 'User'}</p>
+                      <p className="text-xs text-muted-foreground truncate">{email}</p>
+                    </div>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate('/settings')} className="cursor-pointer gap-2">
                   <Settings className="h-4 w-4" />
                   Settings
