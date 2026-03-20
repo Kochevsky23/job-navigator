@@ -1,7 +1,9 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut, Menu, X } from 'lucide-react';
+import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut, Menu, X, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 const links = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -11,9 +13,24 @@ const links = [
 ];
 
 export default function Navbar() {
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [initials, setInitials] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      supabase.from('user_profiles').select('avatar_url, full_name').eq('id', user.id).single()
+        .then(({ data }) => {
+          if (data) {
+            setAvatarUrl((data as any).avatar_url || '');
+            const name = (data as any).full_name || '';
+            setInitials(name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase());
+          }
+        });
+    }
+  }, [user]);
 
   const handleLogout = async () => {
     await signOut();
@@ -48,13 +65,21 @@ export default function Navbar() {
               {label}
             </NavLink>
           ))}
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200 ml-1"
-          >
-            <LogOut className="h-4 w-4" />
-            Logout
-          </button>
+          <div className="flex items-center gap-2 ml-2 pl-2 border-l border-[hsl(var(--glass-border)/0.3)]">
+            <Avatar className="h-7 w-7">
+              {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile" />}
+              <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
+                {initials || <User className="h-3.5 w-3.5" />}
+              </AvatarFallback>
+            </Avatar>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* Mobile hamburger */}
