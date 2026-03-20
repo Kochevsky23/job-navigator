@@ -383,7 +383,10 @@ Deno.serve(async (req) => {
     }
 
     // 3. Get CV text — prefer user's stored CV, fallback to Google Drive
-    const cvText = await fetchCVFromDrive(accessToken);
+    let cvText = profile?.cv_text || "";
+    if (!cvText) {
+      cvText = await fetchCVFromDrive(accessToken);
+    }
 
     // 4. Analyze with Claude
     const jobs = await analyzeWithClaude(emails, cvText);
