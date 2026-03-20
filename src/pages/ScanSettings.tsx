@@ -33,6 +33,7 @@ export default function ScanSettings() {
     if (!user) return;
     const { data } = await supabase.from('user_profiles').select('*').eq('id', user.id).single();
     if (data) {
+      setFullName((data as any).full_name || '');
       setCity((data as any).city || '');
       setCvText((data as any).cv_text || '');
       setCvFilename((data as any).cv_filename || '');
