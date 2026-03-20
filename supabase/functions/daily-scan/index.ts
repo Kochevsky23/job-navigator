@@ -481,6 +481,7 @@ Deno.serve(async (req) => {
         exp_required: job.exp_required,
         job_link: (job.job_link?.trim() && job.job_link.trim().startsWith("http")) ? job.job_link : null,
         linkedin_id: job.linkedin_id || null,
+        company_domain: job.company_domain || null,
         status: job.status || "New",
         fingerprint,
         alert_date: new Date().toISOString(),
