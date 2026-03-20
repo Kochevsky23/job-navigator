@@ -126,48 +126,63 @@ async function analyzeWithClaude(emails: string[], cvText: string): Promise<JobF
   const truncatedEmails = emails.map(e => e.length > 3000 ? e.substring(0, 3000) + "\n[EMAIL TRUNCATED]" : e);
   const emailContent = truncatedEmails.join("\n\n---\n\n");
 
-  const prompt = `You are a strict job-fit scoring assistant. Your task is to extract jobs from email alerts and score each one against the candidate's ACTUAL CV.
+  const prompt = `You are a strict job-fit scoring assistant. Score each job against the candidate's ACTUAL CV using the 4-factor algorithm below.
 
-STEP 1 — Read the CV below carefully. Extract:
+STEP 1 — Read the CV carefully. Extract:
+- Candidate's city/location
 - Real experience level (years, internships, student jobs)
-- Actual technical skills listed
+- Actual technical skills and tools listed
 - Education level and field
 - Languages spoken
 
-STEP 2 — Extract up to 15 unique jobs from the email alerts below. If there are more than 15, pick the most relevant ones.
+STEP 2 — Extract up to 15 unique jobs from the email alerts below.
 
-STEP 3 — For each job, score fit 1-10 using this STRICT rubric:
-- 9-10: PERFECT FIT — job explicitly targets students/graduates, matches CV skills exactly, no experience required
-- 7-8: GOOD FIT — entry level, 0-2 years exp, mostly matches CV skills and field
-- 5-6: POSSIBLE FIT — junior but not explicit about students, partial skills match
-- 3-4: WEAK FIT — some experience required (1-3 years), or field is tangential to CV
-- 1-2: REJECTED — senior role, wrong field entirely, requires experience candidate clearly doesn't have
+STEP 3 — Score each job using ALL 4 FACTORS and sum them (max 10):
 
-BE STRICT. Most jobs should score 4-6. Only score 8+ if the job EXPLICITLY targets students or fresh graduates AND matches CV skills. Justify every score.
+FACTOR 1 — CV KEYWORD MATCH (up to 4 points)
+Count how many of the job's requirements appear in the CV:
+- 4 points: 80%+ of requirements match CV
+- 3 points: 60-80% match
+- 2 points: 40-60% match
+- 1 point: 20-40% match
+- 0 points: less than 20% match
 
-STEP 4 — Assign priority based on score:
-- HIGH: score 7-10 (strong junior fit)
-- MEDIUM: score 5-6 (possible fit)
-- LOW: score 3-4 (weak fit)
-- REJECTED: score 1-2 (filtered out)
+FACTOR 2 — JOB LEVEL FIT (up to 3 points)
+- 3 points: explicitly says "student position", "משרת סטודנט", "internship", "התמחות", "entry level", "0 years experience", "fresh graduate"
+- 2 points: says "junior", "1-2 years experience", or experience requirement is unclear/not mentioned
+- 1 point: says "2-3 years experience"
+- 0 points: says "3+ years", or title contains Senior/Lead/Principal/Manager/Director/Head/VP → also force priority REJECTED
 
-STEP 5 — Auto-REJECT (score 1, priority REJECTED) if:
-- Title contains Senior/Lead/Principal/Manager/Director/Head/Staff/Architect
-- Requires 3+ years experience
-- Completely unrelated to data/analytics/operations/IE/business analysis/project management
+FACTOR 3 — LOCATION (up to 2 points)
+Extract the candidate's city from their CV, then:
+- 2 points: job is in the same city as candidate
+- 1 point: job is within ~40km of candidate's city (e.g. nearby cities in the same metro area)
+- 0 points: job is far from candidate's city (different region)
+- If job is REMOTE: score 0 points AND set priority to REJECTED (ignore remote jobs)
+- If location not mentioned: 1 point (assume possible)
 
-For each job provide: company, role, location, job_link, linkedin_id, exp_required, reason.
+FACTOR 4 — FIELD RELEVANCE (up to 1 point)
+- 1 point: role is directly related to data, analytics, BI, business analysis, operations, industrial engineering, product, supply chain, logistics
+- 0 points: unrelated field (marketing, sales, civil engineering, law, accounting, etc.) → also force priority LOW
+
+FINAL SCORE = Factor1 + Factor2 + Factor3 + Factor4 (max 10)
+
+PRIORITY RULES:
+- HIGH: score 8-10
+- MEDIUM: score 5-7
+- LOW: score 3-4
+- REJECTED: score 1-2, OR title has Senior/Lead/Manager/Director/Head/VP, OR remote job, OR requires 3+ years
+
+REASON FORMAT (mandatory — explain using factors):
+"Score X — CV match: [skills found] (+N), Level: [student/junior/senior] (+N), Location: [city] (+N), Field: [relevant/not] (+N). [any missing skills or disqualifiers]."
+Example: "Score 7 — CV match: SQL, Python, Excel found (3/4 reqs, +3), entry level role (+3), Tel Aviv location (+2), data analytics field (+1), missing Tableau skill (-1)."
+NEVER write vague reasons like "Good fit for candidate".
 
 LINK EXTRACTION RULES (mandatory — every job MUST have at least one link):
-- job_link: the DIRECT company career page URL (e.g. careers.company.com/job/123, workday.com/..., greenhouse.io/...). If no company URL is found, set to empty string "".
-- linkedin_id: if a LinkedIn URL exists in the email, extract ONLY the numeric job ID (e.g. "4385024025" from linkedin.com/jobs/view/4385024025). If no LinkedIn URL, use empty string "".
-- NEVER store a linkedin.com URL in job_link. LinkedIn URLs go to linkedin_id as just the number.
-- IMPORTANT: If you cannot find a company career page URL, but you have a LinkedIn job ID, that is fine — just make sure linkedin_id is populated. Every job MUST have at least one of job_link or linkedin_id filled.
-
-REASON FORMAT (mandatory — follow this exactly):
-"Score X — [why this score]. [experience required vs Dor's level as 3rd year IE student]. [specific skills match/mismatch from CV]."
-Example good reason: "Score 7 — entry-level data analyst, 0-1yr exp fits Dor's student status. Requires SQL and Excel which Dor has. Operations focus matches IE background."
-Example bad reason: "Good fit for candidate" — NEVER write vague reasons like this.
+- job_link: the DIRECT company career page URL (e.g. careers.company.com/job/123). If no company URL found, set to empty string "".
+- linkedin_id: if a LinkedIn URL exists, extract ONLY the numeric job ID (e.g. "4385024025"). If no LinkedIn URL, use empty string "".
+- NEVER store a linkedin.com URL in job_link.
+- Every job MUST have at least one of job_link or linkedin_id filled.
 
 ===== CANDIDATE CV =====
 ${truncatedCV}
