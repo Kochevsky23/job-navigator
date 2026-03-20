@@ -30,6 +30,10 @@ export default function ScanSettings() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
 
   const fetchProfile = async () => {
     if (!user) return;
