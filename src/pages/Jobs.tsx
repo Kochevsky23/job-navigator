@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Loader2, FileText } from 'lucide-react';
+import { Loader2, FileText, Download } from 'lucide-react';
 import JobDetailPanel from '@/components/JobDetailPanel';
 import CompanyLogo from '@/components/CompanyLogo';
 
