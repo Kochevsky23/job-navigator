@@ -11,7 +11,8 @@ export interface Job {
   priority: Priority;
   reason: string;
   exp_required: string;
-  job_link: string;
+  job_link: string | null;
+  linkedin_id: string | null;
   status: JobStatus;
   fingerprint: string;
   alert_date: string | null;

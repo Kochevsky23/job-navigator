@@ -115,6 +115,7 @@ interface JobFromClaude {
   priority: string;
   exp_required: string;
   job_link: string;
+  linkedin_id: string;
   reason: string;
   status: string;
 }
@@ -155,14 +156,17 @@ STEP 5 — Auto-REJECT (score 1, priority REJECTED) if:
 - Requires 3+ years experience
 - Completely unrelated to data/analytics/operations/IE/business analysis/project management
 
-For each job provide: company, role, location, job_link (use the BASE URL only — remove all tracking parameters like trackingId, refId, lipi, midToken, trk etc. If no clean URL exists, use empty string), exp_required, reason.
+For each job provide: company, role, location, job_link, linkedin_id, exp_required, reason.
+
+LINK EXTRACTION RULES (mandatory):
+- job_link: the DIRECT company career page URL (e.g. careers.company.com/job/123, workday.com/..., greenhouse.io/...). If no company URL is found, use empty string "".
+- linkedin_id: if a LinkedIn URL exists in the email, extract ONLY the numeric job ID (e.g. "4385024025" from linkedin.com/jobs/view/4385024025). If no LinkedIn URL, use empty string "".
+- NEVER store a linkedin.com URL in job_link. LinkedIn URLs go to linkedin_id as just the number.
 
 REASON FORMAT (mandatory — follow this exactly):
 "Score X — [why this score]. [experience required vs Dor's level as 3rd year IE student]. [specific skills match/mismatch from CV]."
 Example good reason: "Score 7 — entry-level data analyst, 0-1yr exp fits Dor's student status. Requires SQL and Excel which Dor has. Operations focus matches IE background."
 Example bad reason: "Good fit for candidate" — NEVER write vague reasons like this.
-
-Keep job_link URLs short (base URL only, no tracking params).
 
 ===== CANDIDATE CV =====
 ${truncatedCV}
@@ -173,7 +177,7 @@ ${emailContent}
 Return ONLY valid JSON with no trailing commas:
 {
   "jobs": [{
-    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "reason": "", "status": "New"
+    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "reason": "", "status": "New"
   }]
 }`;
 
@@ -383,18 +387,28 @@ Deno.serve(async (req) => {
 
     // 6. Clean up job links and insert new jobs — skip duplicates entirely
     for (const job of jobs) {
-      // Normalize LinkedIn URLs: remove /comm/ and strip query params
+      // Extract linkedin_id from job_link if it's a LinkedIn URL
       if (job.job_link) {
-        job.job_link = job.job_link.replace(/linkedin\.com\/comm\/jobs/gi, "linkedin.com/jobs");
-        // Strip query params from LinkedIn job URLs, keeping just the path
-        job.job_link = job.job_link.replace(/(linkedin\.com\/jobs\/view\/\d+\/?)(\?.*)?$/i, "$1");
+        const linkedinMatch = job.job_link.match(/linkedin\.com\/(?:comm\/)?jobs\/view\/(\d+)/i);
+        if (linkedinMatch) {
+          // Move LinkedIn ID to linkedin_id field, clear job_link
+          if (!job.linkedin_id) job.linkedin_id = linkedinMatch[1];
+          job.job_link = "";
+        }
       }
 
-      const link = job.job_link?.trim().toLowerCase();
-      const hasValidLink = link && link.startsWith("http");
-      const fingerprint = hasValidLink
-        ? `link::${link}`
-        : `meta::${(job.company || '').trim().toLowerCase()}__${(job.role || '').trim().toLowerCase()}__${(job.location || '').trim().toLowerCase()}`;
+      // Clean linkedin_id to just digits
+      if (job.linkedin_id) {
+        const idMatch = job.linkedin_id.match(/(\d+)/);
+        job.linkedin_id = idMatch ? idMatch[1] : "";
+      }
+
+      // Build fingerprint
+      const linkedinFp = job.linkedin_id ? `linkedin::${job.linkedin_id}` : "";
+      const linkFp = job.job_link?.trim().toLowerCase();
+      const hasValidLink = linkFp && linkFp.startsWith("http");
+      const fingerprint = linkedinFp
+        || (hasValidLink ? `link::${linkFp}` : `meta::${(job.company || '').trim().toLowerCase()}__${(job.role || '').trim().toLowerCase()}__${(job.location || '').trim().toLowerCase()}`);
 
       // Check by fingerprint — if exists, skip entirely
       const { data: existing } = await supabase
@@ -426,7 +440,8 @@ Deno.serve(async (req) => {
         priority: job.priority,
         reason: job.reason,
         exp_required: job.exp_required,
-        job_link: job.job_link,
+        job_link: job.job_link || null,
+        linkedin_id: job.linkedin_id || null,
         status: job.status || "New",
         fingerprint,
         alert_date: new Date().toISOString(),

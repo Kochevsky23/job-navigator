@@ -24,6 +24,7 @@ export type Database = {
           fingerprint: string | null
           id: string
           job_link: string | null
+          linkedin_id: string | null
           location: string | null
           priority: string
           reason: string | null
@@ -41,6 +42,7 @@ export type Database = {
           fingerprint?: string | null
           id?: string
           job_link?: string | null
+          linkedin_id?: string | null
           location?: string | null
           priority?: string
           reason?: string | null
@@ -58,6 +60,7 @@ export type Database = {
           fingerprint?: string | null
           id?: string
           job_link?: string | null
+          linkedin_id?: string | null
           location?: string | null
           priority?: string
           reason?: string | null
