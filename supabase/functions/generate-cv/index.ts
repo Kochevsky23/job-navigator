@@ -50,8 +50,8 @@ Deno.serve(async (req) => {
     if (!jobId) throw new Error("jobId is required");
 
     const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("EXTERNAL_SUPABASE_URL")!,
+      Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!
     );
 
     const { data: job, error } = await supabase.from("jobs").select("*").eq("id", jobId).single();

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/supabase-external';
 import { Job, Priority, JobStatus } from '@/types/database';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +25,7 @@ export default function Jobs() {
   const [minScore, setMinScore] = useState(0);
 
   const fetchJobs = async () => {
-    const { data } = await supabase.from('jobs').select('*').order('created_at', { ascending: false });
+    const { data } = await db.from('jobs').select('*').order('created_at', { ascending: false });
     if (data) setJobs(data as unknown as Job[]);
     setLoading(false);
   };

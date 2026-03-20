@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/supabase-external';
 import { Job, JobStatus } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +26,7 @@ export default function Pipeline() {
   const [loading, setLoading] = useState(true);
 
   const fetchJobs = async () => {
-    const { data } = await supabase.from('jobs').select('*').order('score', { ascending: false });
+    const { data } = await db.from('jobs').select('*').order('score', { ascending: false });
     if (data) setJobs(data as unknown as Job[]);
     setLoading(false);
   };
@@ -43,7 +43,7 @@ export default function Pipeline() {
     const updateData: Record<string, any> = { status: newStatus };
     if (newStatus === 'Applied') updateData.applied_at = new Date().toISOString();
 
-    const { error } = await supabase.from('jobs').update(updateData).eq('id', jobId);
+    const { error } = await db.from('jobs').update(updateData).eq('id', jobId);
     if (error) {
       toast.error('Failed to update status');
       fetchJobs();

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/supabase-external';
 import { runDailyScan } from '@/lib/api';
 import { Job, ScanRun } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,8 +18,8 @@ export default function Dashboard() {
 
   const fetchData = async () => {
     const [jobsRes, scansRes] = await Promise.all([
-      supabase.from('jobs').select('*'),
-      supabase.from('scan_runs').select('*').order('started_at', { ascending: false }).limit(7),
+      db.from('jobs').select('*'),
+      db.from('scan_runs').select('*').order('started_at', { ascending: false }).limit(7),
     ]);
     if (jobsRes.data) setJobs(jobsRes.data as unknown as Job[]);
     if (scansRes.data) setScans(scansRes.data as unknown as ScanRun[]);
