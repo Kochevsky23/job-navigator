@@ -21,18 +21,6 @@ const priorityClass: Record<string, string> = {
   REJECTED: 'bg-priority-rejected priority-rejected border',
 };
 
-function CompanyAvatar({ name }: { name: string }) {
-  const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const hue = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
-  return (
-    <div
-      className="h-14 w-14 rounded-2xl flex items-center justify-center text-lg font-bold text-white shrink-0"
-      style={{ background: `linear-gradient(135deg, hsl(${hue} 60% 45%), hsl(${(hue + 40) % 360} 70% 55%))` }}
-    >
-      {initials}
-    </div>
-  );
-}
 
 function CircularScore({ score }: { score: number }) {
   const pct = (score / 10) * 100;
