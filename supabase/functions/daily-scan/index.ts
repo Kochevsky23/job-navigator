@@ -524,6 +524,7 @@ Deno.serve(async (req) => {
     const { data: highScoreJobs } = await supabase
       .from("jobs")
       .select("*")
+      .eq("user_id", userId)
       .gt("score", 6)
       .is("tailored_cv", null)
       .neq("priority", "REJECTED");
