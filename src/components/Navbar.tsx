@@ -86,7 +86,22 @@ export default function Navbar() {
                   </Avatar>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="font-normal pb-2">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-9 w-9">
+                      {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile" />}
+                      <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">
+                        {initials || <User className="h-4 w-4" />}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{fullName || 'User'}</p>
+                      <p className="text-xs text-muted-foreground truncate">{email}</p>
+                    </div>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate('/settings')} className="cursor-pointer gap-2">
                   <Settings className="h-4 w-4" />
                   Settings
