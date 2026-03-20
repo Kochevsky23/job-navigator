@@ -67,9 +67,12 @@ export default function Dashboard() {
   useEffect(() => {
     fetchData();
     if (user) {
-      supabase.from('user_profiles').select('full_name').eq('id', user.id).single()
+      supabase.from('user_profiles').select('full_name, avatar_url').eq('id', user.id).single()
         .then(({ data }) => {
-          if (data) setUserName((data as any).full_name?.split(' ')[0] || '');
+          if (data) {
+            setUserName((data as any).full_name?.split(' ')[0] || '');
+            setAvatarUrl((data as any).avatar_url || '');
+          }
         });
     }
   }, [user]);
