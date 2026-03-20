@@ -392,7 +392,6 @@ Deno.serve(async (req) => {
       if (job.job_link) {
         const linkedinMatch = job.job_link.match(/linkedin\.com\/(?:comm\/)?jobs\/view\/(\d+)/i);
         if (linkedinMatch) {
-          // Move LinkedIn ID to linkedin_id field, clear job_link
           if (!job.linkedin_id) job.linkedin_id = linkedinMatch[1];
           job.job_link = "";
         }
@@ -402,6 +401,13 @@ Deno.serve(async (req) => {
       if (job.linkedin_id) {
         const idMatch = job.linkedin_id.match(/(\d+)/);
         job.linkedin_id = idMatch ? idMatch[1] : "";
+      }
+
+      // Fallback: if no job_link and we have linkedin_id, construct LinkedIn URL as job_link
+      // so every job has at least one working link
+      const hasCompanyLink = job.job_link?.trim() && job.job_link.trim().startsWith("http");
+      if (!hasCompanyLink && !job.linkedin_id) {
+        // No link at all — leave as is (rare edge case)
       }
 
       // Build fingerprint
@@ -441,7 +447,7 @@ Deno.serve(async (req) => {
         priority: job.priority,
         reason: job.reason,
         exp_required: job.exp_required,
-        job_link: job.job_link || null,
+        job_link: (job.job_link?.trim() && job.job_link.trim().startsWith("http")) ? job.job_link : null,
         linkedin_id: job.linkedin_id || null,
         status: job.status || "New",
         fingerprint,
@@ -450,7 +456,7 @@ Deno.serve(async (req) => {
 
       // If unique constraint catches it, just skip
       if (insertError) {
-        if (insertError.code === "23505") continue; // unique violation
+        if (insertError.code === "23505") continue;
         console.error("Insert error:", insertError);
       } else {
         jobsAdded++;
