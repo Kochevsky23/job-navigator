@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { formatDistanceToNow } from 'date-fns';
 import { db } from '@/lib/supabase-external';
 import { Job, Priority, JobStatus } from '@/types/database';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -106,13 +107,14 @@ export default function Jobs() {
               <TableHead>Priority</TableHead>
               <TableHead className="hidden lg:table-cell">Reason</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="hidden md:table-cell">Found</TableHead>
               <TableHead>CV</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                   No jobs found matching filters
                 </TableCell>
               </TableRow>
@@ -139,6 +141,9 @@ export default function Jobs() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs">{job.status}</Badge>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell text-xs text-muted-foreground whitespace-nowrap">
+                    {job.alert_date ? formatDistanceToNow(new Date(job.alert_date), { addSuffix: true }) : '—'}
                   </TableCell>
                   <TableCell>
                     {job.tailored_cv ? (
