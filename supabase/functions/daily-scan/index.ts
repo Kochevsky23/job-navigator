@@ -6,14 +6,14 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-async function getGoogleAccessToken(): Promise<string> {
+async function getGoogleAccessToken(refreshToken: string): Promise<string> {
   const resp = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: Deno.env.get("GOOGLE_CLIENT_ID")!,
       client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET")!,
-      refresh_token: Deno.env.get("GOOGLE_REFRESH_TOKEN")!,
+      refresh_token: refreshToken,
       grant_type: "refresh_token",
     }),
   });
@@ -371,10 +371,10 @@ Deno.serve(async (req) => {
   }
   const userId = user.id;
 
-  // Fetch user's profile for CV text
+  // Fetch user's profile for CV text and Gmail credentials
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("cv_text, full_name, city")
+    .select("cv_text, full_name, city, google_refresh_token")
     .eq("id", userId)
     .single();
 
@@ -383,8 +383,12 @@ Deno.serve(async (req) => {
   const skippedDetails: { company: string; role: string; reason: string }[] = [];
 
   try {
-    // 1. Get Google access token (shared credentials)
-    const accessToken = await getGoogleAccessToken();
+    // 1. Get Google access token — use user's own token, fall back to shared env var
+    const refreshToken = (profile as any)?.google_refresh_token || Deno.env.get("GOOGLE_REFRESH_TOKEN");
+    if (!refreshToken) {
+      throw new Error("Gmail not connected. Please connect your Gmail account in Settings.");
+    }
+    const accessToken = await getGoogleAccessToken(refreshToken);
 
     // 2. Fetch emails
     const emails = await fetchJobAlertEmails(accessToken);

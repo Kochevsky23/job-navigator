@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/supabase-external';
 import { runDailyScan } from '@/lib/api';
@@ -9,13 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Radar, Mail, Brain, FileText, Clock, Upload, User, MapPin, Save, CheckCircle2, AtSign, Lock, Camera } from 'lucide-react';
+import { Loader2, Radar, Mail, Brain, FileText, Clock, Upload, User, MapPin, Save, CheckCircle2, AtSign, Lock, Camera, RefreshCw, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 
 export default function ScanSettings() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [scanning, setScanning] = useState(false);
   const [scans, setScans] = useState<ScanRun[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +38,22 @@ export default function ScanSettings() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [connectingGmail, setConnectingGmail] = useState(false);
+
+  // Handle ?gmail= callback from OAuth redirect
+  useEffect(() => {
+    const gmailParam = searchParams.get('gmail');
+    if (gmailParam === 'connected') {
+      toast.success('Gmail connected successfully!');
+      setGmailConnected(true);
+      setSearchParams({}, { replace: true });
+    } else if (gmailParam === 'error') {
+      const reason = searchParams.get('reason') || 'unknown';
+      toast.error(`Gmail connection failed: ${reason}`);
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -46,9 +64,35 @@ export default function ScanSettings() {
       setCvText((data as any).cv_text || '');
       setCvFilename((data as any).cv_filename || '');
       setAvatarUrl((data as any).avatar_url || '');
+      setGmailConnected(!!(data as any).google_refresh_token);
     }
     setEmail(user?.email || '');
     setProfileLoading(false);
+  };
+
+  const handleConnectGmail = async () => {
+    if (!user) return;
+    setConnectingGmail(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gmail-oauth-start`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ redirect_url: `${window.location.origin}/settings` }),
+        }
+      );
+      const { url, error } = await resp.json();
+      if (error || !url) throw new Error(error || 'Failed to get OAuth URL');
+      window.location.href = url;
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to start Gmail connection');
+      setConnectingGmail(false);
+    }
   };
 
   const fetchScans = async () => {
@@ -454,11 +498,43 @@ export default function ScanSettings() {
           <div className="space-y-3">
             <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
               <Mail className="h-5 w-5 text-primary shrink-0" />
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">Gmail Source</p>
                 <p className="text-xs text-muted-foreground">Label: "Job Alerts" — Last 24 hours</p>
               </div>
-              <Badge variant="outline" className="ml-auto">Active</Badge>
+              {gmailConnected ? (
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant="outline" className="text-[hsl(var(--success))] border-[hsl(var(--success)/0.4)] bg-[hsl(var(--success)/0.08)]">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={connectingGmail}
+                    onClick={handleConnectGmail}
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {connectingGmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    <span className="ml-1">Reconnect</span>
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={connectingGmail}
+                  onClick={handleConnectGmail}
+                  className="shrink-0 h-7 px-3 text-xs gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10"
+                >
+                  {connectingGmail ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <AlertCircle className="h-3.5 w-3.5" />
+                  )}
+                  Connect Gmail
+                </Button>
+              )}
             </div>
             <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
               <Brain className="h-5 w-5 text-accent shrink-0" />
