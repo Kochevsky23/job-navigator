@@ -26,25 +26,28 @@ async function fetchJobAlertEmails(accessToken: string): Promise<string[]> {
   const after = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
   const query = encodeURIComponent(`label:Job Alerts after:${after}`);
   const listResp = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=50`,
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=20`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const listData = await listResp.json();
   if (!listData.messages || listData.messages.length === 0) return [];
 
-  const emails: string[] = [];
-  for (const msg of listData.messages) {
-    const msgResp = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    const msgData = await msgResp.json();
+  // Fetch all messages in parallel instead of sequentially
+  const msgResponses = await Promise.all(
+    listData.messages.map((msg: any) =>
+      fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      ).then(r => r.json())
+    )
+  );
+
+  return msgResponses.map((msgData: any) => {
     const subject = msgData.payload?.headers?.find((h: any) => h.name === "Subject")?.value || "";
     const from = msgData.payload?.headers?.find((h: any) => h.name === "From")?.value || "";
     const body = extractEmailBody(msgData.payload);
-    emails.push(`From: ${from}\nSubject: ${subject}\n\n${body}`);
-  }
-  return emails;
+    return `From: ${from}\nSubject: ${subject}\n\n${body}`;
+  });
 }
 
 function decodeBase64Url(data: string): string {
@@ -122,82 +125,81 @@ interface JobFromClaude {
 }
 
 async function analyzeWithClaude(emails: string[], cvText: string): Promise<JobFromClaude[]> {
-  // Truncate inputs to keep token count manageable
-  const truncatedCV = cvText.length > 6000 ? cvText.substring(0, 6000) + "\n[CV TRUNCATED]" : cvText;
-  const truncatedEmails = emails.map(e => e.length > 3000 ? e.substring(0, 3000) + "\n[EMAIL TRUNCATED]" : e);
+  // Use more CV text for better matching, and more per-email for digest emails
+  const truncatedCV = cvText.length > 10000 ? cvText.substring(0, 10000) + "\n[CV TRUNCATED]" : cvText;
+  const truncatedEmails = emails.map(e => e.length > 6000 ? e.substring(0, 6000) + "\n[EMAIL TRUNCATED]" : e);
   const emailContent = truncatedEmails.join("\n\n---\n\n");
 
-  const prompt = `You are a strict job-fit scoring assistant. Score each job against the candidate's ACTUAL CV using the 4-factor algorithm below.
-
-STEP 1 — Read the CV carefully. Extract:
-- Candidate's city/location
-- Real experience level (years, internships, student jobs)
-- Actual technical skills and tools listed
-- Education level and field
-- Languages spoken
-
-STEP 2 — Extract up to 15 unique jobs from the email alerts below.
-
-STEP 3 — Score each job using ALL 4 FACTORS and sum them (max 10):
-
-FACTOR 1 — CV KEYWORD MATCH (up to 4 points)
-Count how many of the job's requirements appear in the CV:
-- 4 points: 80%+ of requirements match CV
-- 3 points: 60-80% match
-- 2 points: 40-60% match
-- 1 point: 20-40% match
-- 0 points: less than 20% match
-
-FACTOR 2 — JOB LEVEL FIT (up to 3 points)
-- 3 points: explicitly says "student position", "משרת סטודנט", "internship", "התמחות", "entry level", "0 years experience", "fresh graduate"
-- 2 points: says "junior", "1-2 years experience", or experience requirement is unclear/not mentioned
-- 1 point: says "2-3 years experience"
-- 0 points: says "3+ years", or title contains Senior/Lead/Principal/Manager/Director/Head/VP → also force priority REJECTED
-
-FACTOR 3 — LOCATION (up to 2 points)
-Extract the candidate's city from their CV, then:
-- 2 points: job is in the same city as candidate
-- 1 point: job is within ~40km of candidate's city (e.g. nearby cities in the same metro area)
-- 0 points: job is far from candidate's city (different region)
-- If job is REMOTE: score 0 points AND set priority to REJECTED (ignore remote jobs)
-- If location not mentioned: 1 point (assume possible)
-
-FACTOR 4 — FIELD RELEVANCE (up to 1 point)
-- 1 point: role is directly related to data, analytics, BI, business analysis, operations, industrial engineering, product, supply chain, logistics
-- 0 points: unrelated field (marketing, sales, civil engineering, law, accounting, etc.) → also force priority LOW
-
-FINAL SCORE = Factor1 + Factor2 + Factor3 + Factor4 (max 10)
-
-PRIORITY RULES:
-- HIGH: score 8-10
-- MEDIUM: score 5-7
-- LOW: score 3-4
-- REJECTED: score 1-2, OR title has Senior/Lead/Manager/Director/Head/VP, OR remote job, OR requires 3+ years
-
-REASON FORMAT (mandatory — explain using factors):
-"Score X — CV match: [skills found] (+N), Level: [student/junior/senior] (+N), Location: [city] (+N), Field: [relevant/not] (+N). [any missing skills or disqualifiers]."
-Example: "Score 7 — CV match: SQL, Python, Excel found (3/4 reqs, +3), entry level role (+3), Tel Aviv location (+2), data analytics field (+1), missing Tableau skill (-1)."
-NEVER write vague reasons like "Good fit for candidate".
-
-LINK EXTRACTION RULES (mandatory — every job MUST have at least one link):
-- job_link: the DIRECT company career page URL (e.g. careers.company.com/job/123). If no company URL found, set to empty string "".
-- linkedin_id: if a LinkedIn URL exists, extract ONLY the numeric job ID (e.g. "4385024025"). If no LinkedIn URL, use empty string "".
-- NEVER store a linkedin.com URL in job_link.
-- Every job MUST have at least one of job_link or linkedin_id filled.
-
-COMPANY DOMAIN (mandatory):
-- company_domain: the company's main website domain (e.g. "google.com", "playtika.com", "tevapharm.com", "siemens-energy.com")
-- If you know the company, provide their actual domain
-- If unsure, guess based on the company name (e.g. "Acme Corp" → "acmecorp.com")
-- Never leave company_domain empty
+  const prompt = `You are an expert job-fit analyst. Your task is to extract EVERY job listing from the emails and score each one carefully against the candidate's CV.
 
 ===== CANDIDATE CV =====
 ${truncatedCV}
+===== END CV =====
 
-===== RECENT JOB ALERT EMAILS =====
+STEP 1 — Read the CV thoroughly and note:
+- Candidate's city (for location scoring)
+- Years of experience and current student status
+- Every technical skill, tool, and language explicitly mentioned
+- Education field and degree level
+- Industry domains they have worked in
+
+STEP 2 — Extract EVERY job listing from the emails below.
+IMPORTANT: Many emails are digest-style and contain MULTIPLE job listings. You MUST extract every single job you find — do not stop at 15. Extract up to 30 jobs total.
+Each job listing usually has: company name, job title, location, and a link.
+
+STEP 3 — Score each job on 4 factors (max 10 total):
+
+FACTOR 1 — CV SKILLS MATCH (0-4 pts)
+Read the job's stated requirements carefully. Compare each requirement against what is explicitly in the CV.
+- 4 pts: 80%+ of stated requirements are directly covered by the CV (exact skills, tools, experience)
+- 3 pts: 60-80% of requirements covered
+- 2 pts: 40-60% covered
+- 1 pt: 20-40% covered
+- 0 pts: less than 20% covered
+Be specific — only count skills that are actually in the CV, not assumed.
+
+FACTOR 2 — EXPERIENCE LEVEL FIT (0-3 pts)
+- 3 pts: explicitly says "student", "internship", "entry level", "0-1 years", "fresh graduate", "50%", "משרת סטודנט", "התמחות"
+- 2 pts: "junior", "1-2 years", or no experience requirement stated
+- 1 pt: "2-3 years experience"
+- 0 pts: "3+ years", or title contains Senior/Lead/Principal/Manager/Director/Head/VP/Staff/Architect → force REJECTED
+
+FACTOR 3 — LOCATION (0-2 pts)
+Use the candidate's city from the CV.
+- 2 pts: same city as candidate OR within 10km
+- 1 pt: commutable distance (~40km, e.g. Tel Aviv metro area from Kfar Saba)
+- 0 pts: far away (Haifa, Jerusalem, Be'er Sheva, south) OR remote → remote = force REJECTED
+
+FACTOR 4 — FIELD RELEVANCE (0-1 pt)
+- 1 pt: data analysis, BI, business intelligence, analytics, business analysis, operations, industrial engineering, supply chain, logistics, product, finance analytics, data science, reporting
+- 0 pts: unrelated (pure sales, HR, marketing only, civil/mechanical engineering, law, etc.)
+
+PRIORITY:
+- HIGH: 8-10
+- MEDIUM: 5-7
+- LOW: 3-4
+- REJECTED: 1-2, OR senior/manager title, OR remote, OR 3+ years required
+
+REASON (mandatory, 3-4 sentences):
+Sentence 1: List the specific skills/experience from the CV that match this job's requirements (be specific with tool/skill names).
+Sentence 2: State what requirements from the job are missing or only partially covered in the CV.
+Sentence 3: Assess the experience level fit and location.
+Sentence 4: Overall verdict — why this is or isn't a good fit.
+Example: "Your SQL data pipeline work at Noogata and KPI dashboard experience directly match the data analysis requirements. Python and Excel are listed in both CV and job, though the job also requires Tableau which is not in your CV. Entry-level position fits your student status, and Tel Aviv is commutable from Kfar Saba. Strong overall match — the missing Tableau skill is learnable and should not be a blocker."
+Do NOT write vague reasons. Be specific to THIS candidate's CV and THIS job's requirements.
+
+LINK EXTRACTION:
+- job_link: direct company careers URL only. Empty string if none found.
+- linkedin_id: numeric ID from LinkedIn URL only (e.g. "4385024025"). Empty string if none.
+- NEVER put a linkedin.com URL in job_link.
+
+COMPANY DOMAIN: the company's main website domain. Use your knowledge of the company.
+
+===== JOB ALERT EMAILS =====
 ${emailContent}
+===== END EMAILS =====
 
-Return ONLY valid JSON with no trailing commas. Use only ASCII characters in all string values (no Hebrew, no special quotes, no newlines inside strings):
+Return ONLY valid JSON. ASCII characters only (no Hebrew, no special quotes, no newlines inside strings):
 {
   "jobs": [{
     "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "company_domain": "", "reason": "", "status": "New"
@@ -554,31 +556,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 6. Auto-generate CVs for high-scoring jobs
-    const { data: highScoreJobs } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("user_id", userId)
-      .gt("score", 6)
-      .is("tailored_cv", null)
-      .neq("priority", "REJECTED");
-
-    if (highScoreJobs && highScoreJobs.length > 0) {
-      for (const hsJob of highScoreJobs) {
-        try {
-          const tailoredCV = await generateCVForJob(hsJob, cvText);
-          if (tailoredCV) {
-            await supabase.from("jobs").update({ tailored_cv: tailoredCV }).eq("id", hsJob.id);
-          }
-          // Wait 4 seconds between CV generations
-          await new Promise((r) => setTimeout(r, 4000));
-        } catch (e) {
-          console.error(`CV generation failed for job ${hsJob.id}:`, e);
-        }
-      }
-    }
-
-    // 7. Save scan result
+    // 6. Save scan result (CV generation moved to on-demand via generate-cv function)
     await supabase.from("scan_runs").insert({
       user_id: userId,
       success: true,

@@ -74,21 +74,11 @@ export default function ScanSettings() {
     if (!user) return;
     setConnectingGmail(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gmail-oauth-start`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ redirect_url: `${window.location.origin}/settings` }),
-        }
-      );
-      const { url, error } = await resp.json();
-      if (error || !url) throw new Error(error || 'Failed to get OAuth URL');
-      window.location.href = url;
+      const { data, error } = await supabase.functions.invoke('gmail-oauth-start', {
+        body: { redirect_url: `${window.location.origin}/settings` },
+      });
+      if (error || !data?.url) throw new Error(error?.message || 'Failed to get OAuth URL');
+      window.location.href = data.url;
     } catch (e: any) {
       toast.error(e.message || 'Failed to start Gmail connection');
       setConnectingGmail(false);
