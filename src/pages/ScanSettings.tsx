@@ -40,6 +40,7 @@ export default function ScanSettings() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [gmailConnected, setGmailConnected] = useState(false);
   const [connectingGmail, setConnectingGmail] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
 
   // Handle ?gmail= callback from OAuth redirect
   useEffect(() => {
@@ -68,6 +69,19 @@ export default function ScanSettings() {
     }
     setEmail(user?.email || '');
     setProfileLoading(false);
+  };
+
+  const handleReanalyzeJobs = async () => {
+    setReanalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('reanalyze-jobs');
+      if (error) throw new Error(error.message || 'Reanalysis failed');
+      toast.success(`Updated ${data.updated} job${data.updated !== 1 ? 's' : ''} with improved reasoning.`);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to reanalyze jobs');
+    } finally {
+      setReanalyzing(false);
+    }
   };
 
   const handleConnectGmail = async () => {
@@ -554,6 +568,10 @@ export default function ScanSettings() {
           <Button onClick={handleScan} disabled={scanning} className="w-full gap-2" size="lg">
             {scanning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Radar className="h-5 w-5" />}
             {scanning ? 'Running Scan...' : 'Run Manual Scan'}
+          </Button>
+          <Button onClick={handleReanalyzeJobs} disabled={reanalyzing} variant="outline" className="w-full gap-2" size="sm">
+            {reanalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+            {reanalyzing ? 'Re-analyzing...' : 'Fix Old Job Reasoning'}
           </Button>
         </CardContent>
       </Card>
