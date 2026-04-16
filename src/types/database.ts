@@ -21,6 +21,7 @@ export interface Job {
   company_domain: string | null;
   notes: string | null;
   deadline: string | null;
+  user_score: number | null;
 }
 
 export interface ScanRun {

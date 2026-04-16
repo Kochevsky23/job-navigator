@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Loader2, FileText, Download } from 'lucide-react';
+import { Loader2, FileText, Download, Clock } from 'lucide-react';
 import JobDetailPanel from '@/components/JobDetailPanel';
 import CompanyLogo from '@/components/CompanyLogo';
 
@@ -184,7 +184,13 @@ export default function Jobs() {
                     <Badge variant="outline" className="text-xs border-[hsl(var(--glass-border)/0.5)]">{job.status}</Badge>
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-xs text-muted-foreground whitespace-nowrap">
-                    {job.alert_date ? formatDistanceToNow(new Date(job.alert_date), { addSuffix: true }) : '—'}
+                    <div className="flex items-center gap-1">
+                      {/* Feature 7: stale indicator — New job untouched for 7+ days */}
+                      {job.status === 'New' && job.alert_date && (Date.now() - new Date(job.alert_date).getTime()) > 7 * 24 * 60 * 60 * 1000 && (
+                        <Clock className="h-3 w-3 text-orange-400 shrink-0" title="Untouched for 7+ days" />
+                      )}
+                      {job.alert_date ? formatDistanceToNow(new Date(job.alert_date), { addSuffix: true }) : '—'}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {job.tailored_cv ? (

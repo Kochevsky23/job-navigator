@@ -121,16 +121,96 @@ interface JobFromClaude {
   company_domain: string;
   reason: string;
   status: string;
+  deadline: string; // ISO date string or empty
 }
 
-async function analyzeWithClaude(emails: string[], cvText: string): Promise<JobFromClaude[]> {
+// Feature 8: Try to fetch LinkedIn job description for richer scoring
+async function fetchLinkedInDescription(linkedinId: string): Promise<string> {
+  try {
+    const resp = await fetch(
+      `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${linkedinId}`,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+      }
+    );
+    if (!resp.ok) return "";
+    const html = await resp.text();
+    // Strip HTML tags and grab first 2000 chars of text
+    const text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    return text.substring(0, 2000);
+  } catch {
+    return "";
+  }
+}
+
+// Feature 4: Send email digest via Resend after scan
+async function sendEmailDigest(userEmail: string, addedJobs: JobFromClaude[]): Promise<void> {
+  const resendKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendKey || addedJobs.length === 0) return;
+  const highJobs = addedJobs.filter(j => j.priority === "HIGH").slice(0, 5);
+  if (highJobs.length === 0) return;
+
+  const rows = highJobs.map(j => `
+    <tr style="border-bottom:1px solid #2a2a3a">
+      <td style="padding:10px 8px;font-weight:600">${j.company}</td>
+      <td style="padding:10px 8px">${j.role}</td>
+      <td style="padding:10px 8px;text-align:center;font-weight:700;color:#00f08e">${j.score}/10</td>
+      <td style="padding:10px 8px;color:#888">${j.location}</td>
+    </tr>`).join("");
+
+  const html = `
+    <div style="background:#0e0e1a;color:#e8e8f0;font-family:sans-serif;padding:32px;border-radius:12px;max-width:600px">
+      <h2 style="color:#00f08e;margin-top:0">Job Compass — ${addedJobs.length} new job${addedJobs.length !== 1 ? "s" : ""} found</h2>
+      <p style="color:#888">Top HIGH priority matches:</p>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="color:#888;font-size:12px;border-bottom:1px solid #2a2a3a">
+          <th style="padding:8px;text-align:left">Company</th>
+          <th style="padding:8px;text-align:left">Role</th>
+          <th style="padding:8px;text-align:center">Score</th>
+          <th style="padding:8px;text-align:left">Location</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p style="margin-top:24px;font-size:13px;color:#666">Open Job Compass to view all jobs and apply.</p>
+    </div>`;
+
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${resendKey}` },
+      body: JSON.stringify({
+        from: "Job Compass <onboarding@resend.dev>",
+        to: [userEmail],
+        subject: `Job Compass: ${addedJobs.length} new job${addedJobs.length !== 1 ? "s" : ""} — ${highJobs.length} HIGH priority`,
+        html,
+      }),
+    });
+    console.log(`Email digest sent to ${userEmail}`);
+  } catch (e: any) {
+    console.error("Failed to send email digest:", e.message);
+  }
+}
+
+async function analyzeWithClaude(emails: string[], cvText: string, userRatings: { company: string; role: string; score: number; user_score: number }[]): Promise<JobFromClaude[]> {
   // Use more CV text for better matching, and more per-email for digest emails
   const truncatedCV = cvText.length > 10000 ? cvText.substring(0, 10000) + "\n[CV TRUNCATED]" : cvText;
   const truncatedEmails = emails.map(e => e.length > 10000 ? e.substring(0, 10000) + "\n[EMAIL TRUNCATED]" : e);
   const emailContent = truncatedEmails.join("\n\n---\n\n");
 
+  const ratingsSection = userRatings.length > 0 ? `
+===== USER RATING CALIBRATION =====
+The user has rated these past jobs (1=terrible, 5=perfect fit). Use these to calibrate your scoring:
+${userRatings.map(r => `- ${r.company} / ${r.role} → AI score: ${r.score}/10, User rating: ${r.user_score}/5`).join("\n")}
+If the user consistently rates certain job types higher or lower than your AI score, adjust your scoring for similar jobs accordingly.
+===== END CALIBRATION =====
+` : "";
+
   const prompt = `You are an expert job-fit analyst. Your task is to extract EVERY job listing from the emails and score each one carefully against the candidate's CV.
 
+${ratingsSection}
 ===== CANDIDATE CV =====
 ${truncatedCV}
 ===== END CV =====
@@ -194,6 +274,8 @@ LINK EXTRACTION:
 
 COMPANY DOMAIN: the company's main website domain. Use your knowledge of the company.
 
+DEADLINE: If the email explicitly mentions an application deadline date, extract it as YYYY-MM-DD. Otherwise empty string.
+
 ===== JOB ALERT EMAILS =====
 ${emailContent}
 ===== END EMAILS =====
@@ -201,7 +283,7 @@ ${emailContent}
 Return ONLY valid JSON. ASCII characters only (no Hebrew, no special quotes, no newlines inside strings):
 {
   "jobs": [{
-    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "company_domain": "", "reason": "", "status": "New"
+    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "company_domain": "", "reason": "", "status": "New", "deadline": ""
   }]
 }`;
 
@@ -360,17 +442,35 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // Extract user from JWT
+  // Extract user — supports normal JWT auth OR service-role call with userId in body
   const authHeader = req.headers.get("Authorization") || "";
   const token = authHeader.replace("Bearer ", "");
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const isServiceCall = token === serviceRoleKey;
+
+  let userId: string;
+  let userEmail: string | undefined;
+
+  if (isServiceCall) {
+    // Called by scheduled-scan — userId must be in request body
+    const body = await req.json().catch(() => ({}));
+    userId = body.userId;
+    userEmail = body.userEmail;
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "userId required for service calls" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  } else {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    userId = user.id;
+    userEmail = user.email;
   }
-  const userId = user.id;
 
   // Fetch user's profile for CV text and Gmail credentials
   const { data: profile } = await supabase
@@ -389,7 +489,8 @@ Deno.serve(async (req) => {
     .limit(1)
     .maybeSingle();
 
-  const fallbackAfter = Math.floor((Date.now() - 48 * 60 * 60 * 1000) / 1000);
+  // Feature 5: First scan ever uses 7 days back; subsequent scans use last scan timestamp
+  const fallbackAfter = Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
   const afterTimestamp = lastScan?.started_at
     ? Math.floor(new Date(lastScan.started_at).getTime() / 1000)
     : fallbackAfter;
@@ -433,9 +534,33 @@ Deno.serve(async (req) => {
       console.log(`Step 3: CV from Drive: ${cvText.length} chars`);
     }
 
+    // 3b. Feature 6: Fetch user's past ratings for calibration
+    const { data: ratedJobsData } = await supabase
+      .from("jobs")
+      .select("company, role, score, user_score")
+      .eq("user_id", userId)
+      .not("user_score", "is", null)
+      .order("user_score", { ascending: false })
+      .limit(20);
+    const userRatings = (ratedJobsData || []) as { company: string; role: string; score: number; user_score: number }[];
+    console.log(`Step 3b: ${userRatings.length} rated jobs for calibration`);
+
+    // 3c. Feature 8: Try to enrich emails with LinkedIn descriptions for jobs that have linkedin_id
+    // (best-effort, no failure if it doesn't work)
+    const emailsWithLinkedIn = await Promise.all(
+      emails.map(async (emailText) => {
+        const linkedinIds = [...emailText.matchAll(/linkedin\.com\/(?:comm\/)?jobs\/view\/(\d+)/gi)].map(m => m[1]);
+        if (linkedinIds.length === 0) return emailText;
+        const descriptions = await Promise.all(linkedinIds.map(id => fetchLinkedInDescription(id)));
+        const enrichment = descriptions.filter(Boolean).map((d, i) => `\n[LinkedIn Description for job ${linkedinIds[i]}]: ${d}`).join("");
+        return emailText + enrichment;
+      })
+    );
+    console.log(`Step 3c: LinkedIn enrichment done`);
+
     // 4. Analyze with Claude
     console.log("Step 4: Calling Claude...");
-    const jobs = await analyzeWithClaude(emails, cvText);
+    const jobs = await analyzeWithClaude(emailsWithLinkedIn, cvText, userRatings);
     console.log(`Step 4: Claude returned ${jobs.length} jobs`);
     jobsFound = jobs.length;
 
@@ -564,6 +689,8 @@ Deno.serve(async (req) => {
         status: job.status || "New",
         fingerprint,
         alert_date: new Date().toISOString(),
+        // Feature 3: deadline extracted from email by Claude
+        deadline: job.deadline && /^\d{4}-\d{2}-\d{2}$/.test(job.deadline) ? new Date(job.deadline).toISOString() : null,
       });
 
       if (insertError) {
@@ -579,13 +706,19 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 6. Save scan result (CV generation moved to on-demand via generate-cv function)
+    // 6. Save scan result
     await supabase.from("scan_runs").insert({
       user_id: userId,
       success: true,
       jobs_found: jobsFound,
       jobs_added: jobsAdded,
     });
+
+    // Feature 4: Send email digest if new HIGH jobs were found
+    if (jobsAdded > 0 && userEmail) {
+      const addedJobsList = jobs.filter(j => j.priority !== "REJECTED").slice(0, jobsAdded);
+      await sendEmailDigest(userEmail, addedJobsList);
+    }
 
     const skipDuplicate = skippedDetails.filter(s => s.reason.startsWith("duplicate")).length;
     const skipError = skippedDetails.filter(s => s.reason.startsWith("error")).length;

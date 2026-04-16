@@ -57,6 +57,7 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
   const [notes, setNotes] = useState('');
   const [deadline, setDeadline] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [userScore, setUserScore] = useState<number | null>(null);
 
   // Sync local state when job changes
   useState(() => {
@@ -72,9 +73,22 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
     setPrevJobId(job.id);
     setNotes(job.notes || '');
     setDeadline(job.deadline ? new Date(job.deadline).toISOString().slice(0, 10) : '');
+    setUserScore(job.user_score ?? null);
   }
 
   if (!job) return null;
+
+  const handleRateJob = async (rating: number) => {
+    const newScore = userScore === rating ? null : rating; // toggle off if same
+    setUserScore(newScore);
+    try {
+      await db.from('jobs').update({ user_score: newScore }).eq('id', job!.id);
+      onUpdate?.();
+    } catch (e: any) {
+      toast.error('Failed to save rating');
+      setUserScore(job!.user_score ?? null);
+    }
+  };
 
   const handleSaveNotes = async () => {
     setSavingNotes(true);
@@ -141,14 +155,37 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
 
           <div className="flex items-center gap-4">
             <CircularScore score={job.score} />
-            <div className="flex flex-wrap gap-2">
-              <Badge className={priorityClass[job.priority]}>{job.priority}</Badge>
-              <Badge variant="outline" className="border-[hsl(var(--glass-border)/0.5)]">{job.status}</Badge>
-              {job.applied_at && (
-                <Badge variant="outline" className="border-[hsl(var(--success)/0.3)] text-[hsl(var(--success))] text-xs">
-                  Applied {new Date(job.applied_at).toLocaleDateString()}
-                </Badge>
-              )}
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Badge className={priorityClass[job.priority]}>{job.priority}</Badge>
+                <Badge variant="outline" className="border-[hsl(var(--glass-border)/0.5)]">{job.status}</Badge>
+                {job.applied_at && (
+                  <Badge variant="outline" className="border-[hsl(var(--success)/0.3)] text-[hsl(var(--success))] text-xs">
+                    Applied {new Date(job.applied_at).toLocaleDateString()}
+                  </Badge>
+                )}
+              </div>
+              {/* Feature 6: User rating — trains future scoring */}
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground mr-1">Your fit:</span>
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    onClick={() => handleRateJob(star)}
+                    className={`text-lg leading-none transition-colors ${
+                      userScore !== null && star <= userScore
+                        ? 'text-yellow-400'
+                        : 'text-muted-foreground/30 hover:text-yellow-400/60'
+                    }`}
+                    title={`Rate ${star}/5`}
+                  >
+                    ★
+                  </button>
+                ))}
+                {userScore !== null && (
+                  <span className="text-xs text-muted-foreground ml-1">{userScore}/5</span>
+                )}
+              </div>
             </div>
           </div>
 

@@ -114,6 +114,10 @@ export default function ScanSettings() {
     if (!user) return;
     setSaving(true);
     try {
+      // Get old CV to detect if CV actually changed
+      const { data: oldProfile } = await supabase.from('user_profiles').select('cv_text').eq('id', user.id).single();
+      const cvChanged = cvText !== (oldProfile as any)?.cv_text;
+
       const { error } = await supabase.from('user_profiles').update({
         full_name: fullName,
         city,
@@ -121,6 +125,15 @@ export default function ScanSettings() {
       }).eq('id', user.id);
       if (error) throw error;
       toast.success('Profile updated!');
+
+      // Feature 2: Auto-rescore all jobs when CV changes
+      if (cvChanged && cvText) {
+        toast.info('CV changed — re-scoring your jobs in background...');
+        supabase.functions.invoke('rescore-jobs').then(({ data, error: rescoreErr }) => {
+          if (rescoreErr) return;
+          if (data?.updated > 0) toast.success(`Re-scored ${data.updated} jobs with new CV.`);
+        });
+      }
     } catch (e: any) {
       toast.error(e.message || 'Failed to save');
     } finally {
