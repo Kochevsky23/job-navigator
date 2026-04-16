@@ -8,7 +8,15 @@ export async function runDailyScan(): Promise<{
   skipped_details?: { company: string; role: string; reason: string }[];
 }> {
   const { data, error } = await supabase.functions.invoke('daily-scan');
-  if (error) throw new Error(error.message || 'Scan failed');
+  if (error) {
+    // Try to get the actual error body from the function response
+    let msg = error.message || 'Scan failed';
+    try {
+      const body = await (error as any).context?.json?.();
+      if (body?.error) msg = body.error;
+    } catch {}
+    throw new Error(msg);
+  }
   return data;
 }
 

@@ -22,11 +22,10 @@ async function getGoogleAccessToken(refreshToken: string): Promise<string> {
   return data.access_token;
 }
 
-async function fetchJobAlertEmails(accessToken: string): Promise<string[]> {
-  const after = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
-  const query = encodeURIComponent(`label:Job Alerts after:${after}`);
+async function fetchJobAlertEmails(accessToken: string, afterTimestamp: number): Promise<string[]> {
+  const query = encodeURIComponent(`label:Job Alerts after:${afterTimestamp}`);
   const listResp = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=20`,
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=50`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const listData = await listResp.json();
@@ -127,7 +126,7 @@ interface JobFromClaude {
 async function analyzeWithClaude(emails: string[], cvText: string): Promise<JobFromClaude[]> {
   // Use more CV text for better matching, and more per-email for digest emails
   const truncatedCV = cvText.length > 10000 ? cvText.substring(0, 10000) + "\n[CV TRUNCATED]" : cvText;
-  const truncatedEmails = emails.map(e => e.length > 6000 ? e.substring(0, 6000) + "\n[EMAIL TRUNCATED]" : e);
+  const truncatedEmails = emails.map(e => e.length > 10000 ? e.substring(0, 10000) + "\n[EMAIL TRUNCATED]" : e);
   const emailContent = truncatedEmails.join("\n\n---\n\n");
 
   const prompt = `You are an expert job-fit analyst. Your task is to extract EVERY job listing from the emails and score each one carefully against the candidate's CV.
@@ -144,7 +143,7 @@ STEP 1 — Read the CV thoroughly and note:
 - Industry domains they have worked in
 
 STEP 2 — Extract EVERY job listing from the emails below.
-IMPORTANT: Many emails are digest-style and contain MULTIPLE job listings. You MUST extract every single job you find — do not stop at 15. Extract up to 30 jobs total.
+IMPORTANT: Many emails are digest-style and contain MULTIPLE job listings. You MUST extract every single job you find — do not stop at 30. Extract up to 60 jobs total.
 Each job listing usually has: company name, job title, location, and a link.
 
 STEP 3 — Score each job on 4 factors (max 10 total):
@@ -380,6 +379,22 @@ Deno.serve(async (req) => {
     .eq("id", userId)
     .single();
 
+  // Determine how far back to look — since last successful scan, or 48h fallback
+  const { data: lastScan } = await supabase
+    .from("scan_runs")
+    .select("started_at")
+    .eq("user_id", userId)
+    .eq("success", true)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const fallbackAfter = Math.floor((Date.now() - 48 * 60 * 60 * 1000) / 1000);
+  const afterTimestamp = lastScan?.started_at
+    ? Math.floor(new Date(lastScan.started_at).getTime() / 1000)
+    : fallbackAfter;
+  console.log(`Scanning emails after: ${new Date(afterTimestamp * 1000).toISOString()} (${lastScan ? "last scan" : "48h fallback"})`);
+
   let jobsFound = 0;
   let jobsAdded = 0;
   const skippedDetails: { company: string; role: string; reason: string }[] = [];
@@ -390,10 +405,14 @@ Deno.serve(async (req) => {
     if (!refreshToken) {
       throw new Error("Gmail not connected. Please connect your Gmail account in Settings.");
     }
+    console.log("Step 1: Getting Google access token...");
     const accessToken = await getGoogleAccessToken(refreshToken);
+    console.log("Step 1: OK");
 
-    // 2. Fetch emails
-    const emails = await fetchJobAlertEmails(accessToken);
+    // 2. Fetch emails since last scan
+    console.log("Step 2: Fetching emails...");
+    const emails = await fetchJobAlertEmails(accessToken, afterTimestamp);
+    console.log(`Step 2: Got ${emails.length} emails`);
     if (emails.length === 0) {
       await supabase.from("scan_runs").insert({
         user_id: userId,
@@ -408,12 +427,16 @@ Deno.serve(async (req) => {
 
     // 3. Get CV text — prefer user's stored CV, fallback to Google Drive
     let cvText = profile?.cv_text || "";
+    console.log(`Step 3: CV from profile: ${cvText ? cvText.length + " chars" : "none, fetching from Drive"}`);
     if (!cvText) {
       cvText = await fetchCVFromDrive(accessToken);
+      console.log(`Step 3: CV from Drive: ${cvText.length} chars`);
     }
 
     // 4. Analyze with Claude
+    console.log("Step 4: Calling Claude...");
     const jobs = await analyzeWithClaude(emails, cvText);
+    console.log(`Step 4: Claude returned ${jobs.length} jobs`);
     jobsFound = jobs.length;
 
     // 5. Post-process: enforce hard scoring rules

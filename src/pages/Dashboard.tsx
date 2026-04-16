@@ -107,7 +107,7 @@ export default function Dashboard() {
   const appliedCount = jobs.filter(j => j.status === 'Applied' || j.status === 'Interviewing' || j.status === 'Offer').length;
   const lastScan = scans[0];
 
-  const topJobs = [...todayJobs]
+  const topJobs = [...jobs]
     .sort((a, b) => b.score - a.score)
     .filter(j => j.priority !== 'REJECTED')
     .slice(0, 5);
@@ -132,7 +132,7 @@ export default function Dashboard() {
   }
 
   const stats = [
-    { label: 'Jobs Today', value: todayJobs.length, icon: Briefcase, color: 'primary' as const },
+    { label: 'Total Jobs', value: jobs.length, icon: Briefcase, color: 'primary' as const },
     { label: 'High Priority', value: highPriority, icon: AlertTriangle, color: 'high' as const },
     { label: 'Applied', value: appliedCount, icon: Send, color: 'accent' as const },
     { label: 'CVs Generated', value: cvsGenerated, icon: FileText, color: 'primary' as const },
@@ -271,7 +271,7 @@ export default function Dashboard() {
       {/* Best Matches */}
       {topJobs.length > 0 && (
         <div className="animate-fade-up" style={{ animationDelay: '400ms' }}>
-          <h2 className="text-lg font-display font-semibold mb-4">Best Matches Today</h2>
+          <h2 className="text-lg font-display font-semibold mb-4">Best Matches</h2>
           <div className="flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-2 px-2 snap-x snap-mandatory">
             {topJobs.map((job) => (
               <div
