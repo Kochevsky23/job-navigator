@@ -74,8 +74,17 @@ async function fetchJobAlertEmails(accessToken: string, afterTimestamp: number):
 
   console.log(`[GMAIL] Total fetched: ${emails.length}`);
 
+  // Pre-filter: keep only emails that are clearly job alerts
+  const JOB_SENDERS = /linkedin\.com|indeed\.com|jobnet\.co\.il|glassdoor\.com|alljob\.co\.il|drushim\.co\.il|jobmaster\.co\.il|comeet\.com|smartrecruiters\.com|lever\.co|greenhouse\.io|workable\.com/i;
+  const JOB_SUBJECTS = /job|position|role|hiring|career|vacanc|analyst|engineer|developer|operations|student|intern|משרה|עבודה|דרוש|לתפקיד/i;
+
+  const jobEmails = emails.filter(e =>
+    JOB_SENDERS.test(e.from) || JOB_SUBJECTS.test(e.subject)
+  );
+  console.log(`[GMAIL] After job-filter: ${jobEmails.length}/${emails.length}`);
+
   // Sort oldest-first — we process in chronological order so no opportunities are missed
-  return emails.sort((a, b) => a.internalDate - b.internalDate);
+  return jobEmails.sort((a, b) => a.internalDate - b.internalDate);
 }
 
 function decodeBase64Url(data: string): string {
@@ -311,7 +320,9 @@ Return ONLY valid JSON. ASCII characters only — no Hebrew, no special quotes, 
   }
 
   jsonStr = jsonStr.replace(/,\s*([}\]])/g, "$1");
-  jsonStr = jsonStr.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");
+  // Strip all non-printable and non-ASCII characters (Hebrew, special quotes, etc.)
+  // that break JSON.parse — this is the main source of parse failures
+  jsonStr = jsonStr.replace(/[^\x20-\x7E\n\r\t]/g, "");
 
   let parsed: any;
   try {
@@ -420,10 +431,18 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Record the internalDate (in seconds) of the last/newest email we fetched.
-    // We update last_email_scan_timestamp to this value after a successful scan,
-    // so the next scan starts exactly from the next email — no gaps, no missed jobs.
-    const maxEmailTimestampMs = Math.max(...emails.map(e => e.internalDate));
+    // Cap at 60 emails per scan to avoid Supabase's ~60s function timeout.
+    // The timestamp is set to the last email we ACTUALLY processed,
+    // so the next scan picks up exactly where this one left off.
+    const MAX_EMAILS_PER_SCAN = 60;
+    const emailsToProcess = emails.slice(0, MAX_EMAILS_PER_SCAN);
+    const remaining = emails.length - emailsToProcess.length;
+    if (remaining > 0) {
+      console.log(`[SCAN] Processing ${emailsToProcess.length}/${emails.length} emails — ${remaining} will be picked up next scan`);
+    }
+
+    // last_email_scan_timestamp = internalDate (seconds) of the last email we process this run
+    const maxEmailTimestampMs = emailsToProcess[emailsToProcess.length - 1].internalDate;
     const maxEmailTimestampSec = Math.floor(maxEmailTimestampMs / 1000);
 
     const cvText = (profile as any)?.cv_text || "";
@@ -432,7 +451,7 @@ Deno.serve(async (req) => {
     console.log(`Step 3: CV: ${cvText.length} chars, city: ${candidateCity || "unknown"}`);
 
     // Convert emails to plain text strings for Claude
-    const emailTexts = emails.map(e => `From: ${e.from}\nSubject: ${e.subject}\n\n${e.body}`);
+    const emailTexts = emailsToProcess.map(e => `From: ${e.from}\nSubject: ${e.subject}\n\n${e.body}`);
 
     // Batch 20 emails per Claude call to stay well under the token limit
     const BATCH_SIZE = 20;
