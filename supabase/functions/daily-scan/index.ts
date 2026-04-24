@@ -7,63 +7,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit & { timeoutMs?: number } = {}) {
-  const { timeoutMs = 45000, ...rest } = init;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(input, { ...(rest as RequestInit), signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function isTransientClaudeFailure(err: any): boolean {
-  const msg = String(err?.message || err || "").toLowerCase();
-  if (!msg) return true;
-  return (
-    msg.includes("overloaded") ||
-    msg.includes("rate") ||
-    msg.includes("timeout") ||
-    msg.includes("aborted") ||
-    msg.includes("econnreset") ||
-    msg.includes("etimedout") ||
-    msg.includes("temporary") ||
-    msg.includes("claude returned no content") ||
-    msg.includes("no json found")
-  );
-}
-
-async function callClaudeWithRetry<T>(
-  fn: () => Promise<T>,
-  onRetry: (attempt: number, delayMs: number, err: any) => void,
-): Promise<{ ok: true; value: T; retriesUsed: number } | { ok: false; error: string; retriesUsed: number }> {
-  const delays = [2000, 5000, 10000];
-  let retriesUsed = 0;
-
-  for (let attempt = 0; attempt < delays.length + 1; attempt++) {
-    try {
-      const value = await fn();
-      return { ok: true, value, retriesUsed };
-    } catch (err: any) {
-      const transient = isTransientClaudeFailure(err);
-      if (!transient || attempt >= delays.length) {
-        return { ok: false, error: String(err?.message || err), retriesUsed };
-      }
-      const delayMs = delays[attempt];
-      retriesUsed++;
-      onRetry(attempt + 1, delayMs, err);
-      await sleep(delayMs);
-    }
-  }
-
-  return { ok: false, error: "Unknown Claude retry failure", retriesUsed };
-}
-
 async function getGoogleAccessToken(refreshToken: string): Promise<string> {
   const resp = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -76,76 +19,40 @@ async function getGoogleAccessToken(refreshToken: string): Promise<string> {
     }),
   });
   const data = await resp.json();
-  if (!data.access_token) throw new Error("Failed to get Google access token: " + JSON.stringify(data));
+  if (!data.access_token) {
+    if (data.error === "invalid_grant") {
+      throw new Error("GMAIL_RECONNECT_REQUIRED");
+    }
+    throw new Error("Failed to get Google access token: " + JSON.stringify(data));
+  }
   return data.access_token;
 }
 
-interface EmailWithTimestamp {
-  subject: string;
-  from: string;
-  messageId: string;
-  internalDate: number;
-  body: string;
-  fullEmail: string;
-}
+async function fetchJobAlertEmails(accessToken: string, afterTimestamp: number): Promise<string[]> {
+  const query = encodeURIComponent(`label:Job Alerts after:${afterTimestamp}`);
+  const listResp = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=50`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const listData = await listResp.json();
+  if (!listData.messages || listData.messages.length === 0) return [];
 
-async function fetchJobAlertEmails(accessToken: string, lastScanTimestamp: number): Promise<EmailWithTimestamp[]> {
-  const query = `(label:"Job Alerts" OR from:jobs-noreply@linkedin.com OR from:jobalerts-noreply@linkedin.com OR from:noreply@indeed.com OR from:noreply@jobnet.co.il) newer_than:7d`;
-  const encodedQuery = encodeURIComponent(query);
-  
-  console.log(`[GMAIL] Fetching emails with query: ${query}`);
-  console.log(`[GMAIL] Last scan timestamp: ${lastScanTimestamp} (${new Date(lastScanTimestamp).toISOString()})`);
-  
-  const emails: EmailWithTimestamp[] = [];
-  let pageToken: string | undefined = undefined;
-  let pageCount = 0;
-
-  do {
-    pageCount++;
-    const url = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodedQuery}&maxResults=100${pageToken ? `&pageToken=${pageToken}` : ""}`;
-    const listResp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-    const listData = await listResp.json();
-
-    if (!listData.messages || listData.messages.length === 0) {
-      console.log(`[GMAIL] No messages found on page ${pageCount}`);
-      break;
-    }
-
-    console.log(`[GMAIL] Page ${pageCount}: fetching ${listData.messages.length} email(s)`);
-
-    for (const msg of listData.messages) {
-      const msgResp = await fetch(
+  // Fetch all messages in parallel instead of sequentially
+  const msgResponses = await Promise.all(
+    listData.messages.map((msg: any) =>
+      fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      const msgData = await msgResp.json();
-      const subject = msgData.payload?.headers?.find((h: any) => h.name === "Subject")?.value || "(no subject)";
-      const from = msgData.payload?.headers?.find((h: any) => h.name === "From")?.value || "(unknown sender)";
-      const internalDate = parseInt(msgData.internalDate || "0", 10);
-      const body = extractEmailBody(msgData.payload);
-      
-      emails.push({
-        subject,
-        from,
-        messageId: msg.id,
-        internalDate,
-        body,
-        fullEmail: `From: ${from}\nSubject: ${subject}\n\n${body}`
-      });
-    }
+      ).then(r => r.json())
+    )
+  );
 
-    pageToken = listData.nextPageToken;
-  } while (pageToken && emails.length < 100);
-
-  console.log(`[GMAIL] Total emails fetched: ${emails.length}`);
-  
-  // Filter by timestamp and sort by date (oldest first)
-  const filteredEmails = emails.filter((email) => email.internalDate > lastScanTimestamp);
-  const sortedEmails = filteredEmails.sort((a, b) => a.internalDate - b.internalDate);
-  
-  console.log(`[GMAIL] Emails after timestamp filter: ${sortedEmails.length} (filtered ${emails.length - sortedEmails.length} old emails)`);
-  
-  return sortedEmails;
+  return msgResponses.map((msgData: any) => {
+    const subject = msgData.payload?.headers?.find((h: any) => h.name === "Subject")?.value || "";
+    const from = msgData.payload?.headers?.find((h: any) => h.name === "From")?.value || "";
+    const body = extractEmailBody(msgData.payload);
+    return `From: ${from}\nSubject: ${subject}\n\n${body}`;
+  });
 }
 
 function decodeBase64Url(data: string): string {
@@ -160,10 +67,12 @@ function decodeBase64Url(data: string): string {
 function extractEmailBody(payload: any): string {
   if (!payload) return "";
 
+  // Direct body data on the payload itself
   if (payload.body?.data) {
     return decodeBase64Url(payload.body.data);
   }
 
+  // Multipart: recurse into parts, prefer text/plain then text/html
   if (payload.parts && payload.parts.length > 0) {
     let plainText = "";
     let htmlText = "";
@@ -173,15 +82,37 @@ function extractEmailBody(payload: any): string {
       } else if (part.mimeType === "text/html" && part.body?.data) {
         htmlText = decodeBase64Url(part.body.data);
       } else if (part.parts) {
+        // Nested multipart (e.g. multipart/alternative inside multipart/mixed)
         const nested = extractEmailBody(part);
         if (nested) plainText = plainText || nested;
       }
     }
+    // Prefer plain text; fall back to HTML with tags stripped
     if (plainText) return plainText;
     if (htmlText) return htmlText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   }
 
   return "";
+}
+
+async function fetchCVFromDrive(accessToken: string): Promise<string> {
+  const query = encodeURIComponent("name='Dor_Kochevsky_CV_Main'");
+  const searchResp = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType)`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const searchData = await searchResp.json();
+  if (!searchData.files || searchData.files.length === 0) return "CV not found on Google Drive";
+
+  const file = searchData.files[0];
+  let exportUrl: string;
+  if (file.mimeType === "application/vnd.google-apps.document") {
+    exportUrl = `https://www.googleapis.com/drive/v3/files/${file.id}/export?mimeType=text/plain`;
+  } else {
+    exportUrl = `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`;
+  }
+  const cvResp = await fetch(exportUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+  return await cvResp.text();
 }
 
 interface JobFromClaude {
@@ -198,96 +129,307 @@ interface JobFromClaude {
   status: string;
 }
 
-async function analyzeWithClaude(emails: string[], cvText: string): Promise<JobFromClaude[]> {
-  const truncatedCV = cvText.length > 2000 ? cvText.substring(0, 2000) + "\n[CV TRUNCATED]" : cvText;
-  const truncatedEmails = emails.map(e => e.length > 5000 ? e.substring(0, 5000) + "\n[EMAIL TRUNCATED]" : e);
+// Feature 8: Try to fetch LinkedIn job description for richer scoring
+async function fetchLinkedInDescription(linkedinId: string): Promise<string> {
+  try {
+    const resp = await fetch(
+      `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${linkedinId}`,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+      }
+    );
+    if (!resp.ok) return "";
+    const html = await resp.text();
+    // Strip HTML tags and grab first 2000 chars of text
+    const text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    return text.substring(0, 2000);
+  } catch {
+    return "";
+  }
+}
+
+// Feature 4: Send email digest via Resend after scan
+async function sendEmailDigest(userEmail: string, addedJobs: JobFromClaude[]): Promise<void> {
+  const resendKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendKey || addedJobs.length === 0) return;
+  const highJobs = addedJobs.filter(j => j.priority === "HIGH").slice(0, 5);
+  if (highJobs.length === 0) return;
+
+  const rows = highJobs.map(j => `
+    <tr style="border-bottom:1px solid #2a2a3a">
+      <td style="padding:10px 8px;font-weight:600">${j.company}</td>
+      <td style="padding:10px 8px">${j.role}</td>
+      <td style="padding:10px 8px;text-align:center;font-weight:700;color:#00f08e">${j.score}/10</td>
+      <td style="padding:10px 8px;color:#888">${j.location}</td>
+    </tr>`).join("");
+
+  const html = `
+    <div style="background:#0e0e1a;color:#e8e8f0;font-family:sans-serif;padding:32px;border-radius:12px;max-width:600px">
+      <h2 style="color:#00f08e;margin-top:0">Job Compass — ${addedJobs.length} new job${addedJobs.length !== 1 ? "s" : ""} found</h2>
+      <p style="color:#888">Top HIGH priority matches:</p>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="color:#888;font-size:12px;border-bottom:1px solid #2a2a3a">
+          <th style="padding:8px;text-align:left">Company</th>
+          <th style="padding:8px;text-align:left">Role</th>
+          <th style="padding:8px;text-align:center">Score</th>
+          <th style="padding:8px;text-align:left">Location</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p style="margin-top:24px;font-size:13px;color:#666">Open Job Compass to view all jobs and apply.</p>
+    </div>`;
+
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${resendKey}` },
+      body: JSON.stringify({
+        from: "Job Compass <onboarding@resend.dev>",
+        to: [userEmail],
+        subject: `Job Compass: ${addedJobs.length} new job${addedJobs.length !== 1 ? "s" : ""} — ${highJobs.length} HIGH priority`,
+        html,
+      }),
+    });
+    console.log(`Email digest sent to ${userEmail}`);
+  } catch (e: any) {
+    console.error("Failed to send email digest:", e.message);
+  }
+}
+
+function buildRatingsSection(allRated: { company: string; role: string; score: number; user_score: number; priority: string }[]): string {
+  if (allRated.length === 0) return "";
+  // Sort by biggest mismatch for most informative examples
+  const sorted = [...allRated].sort((a, b) => {
+    const mismatchA = Math.abs(a.score / 10 - a.user_score / 5);
+    const mismatchB = Math.abs(b.score / 10 - b.user_score / 5);
+    return mismatchB - mismatchA;
+  });
+  const top40 = sorted.slice(0, 40);
+  const aiOverscored = allRated.filter(r => r.score >= 7 && r.user_score <= 2);
+  const aiUnderscored = allRated.filter(r => r.score <= 4 && r.user_score >= 4);
+  const goodMatches = allRated.filter(r => r.user_score >= 4 && r.score >= 7);
+
+  const patternLines: string[] = [];
+  if (aiOverscored.length > 0) patternLines.push(`AI OVERSCORED (AI HIGH but user disliked): ${aiOverscored.map(r => `${r.company}/${r.role}`).join(", ")}`);
+  if (aiUnderscored.length > 0) patternLines.push(`AI UNDERSCORED (AI LOW but user liked): ${aiUnderscored.map(r => `${r.company}/${r.role}`).join(", ")}`);
+  if (goodMatches.length > 0) patternLines.push(`CONFIRMED GOOD MATCHES: ${goodMatches.map(r => `${r.company}/${r.role}`).join(", ")}`);
+
+  return `
+===== USER RATING CALIBRATION =====
+The user has rated ${allRated.length} past jobs (1=poor fit, 5=perfect fit). Sorted by biggest AI vs user mismatch first:
+${top40.map(r => `- ${r.company} / ${r.role} → AI: ${r.score}/10, User: ${r.user_score}/5 (${r.user_score >= 4 ? "liked" : r.user_score <= 2 ? "disliked" : "neutral"})`).join("\n")}
+
+PATTERNS TO APPLY TO NEW JOBS:
+${patternLines.length > 0 ? patternLines.join("\n") : "No strong patterns yet."}
+Adjust scoring for new jobs that resemble overscored types (score lower) or underscored types (score higher).
+===== END CALIBRATION =====
+`;
+}
+
+async function analyzeWithClaude(emails: string[], cvText: string, ratingsSection: string): Promise<JobFromClaude[]> {
+  const truncatedCV = cvText.length > 10000 ? cvText.substring(0, 10000) + "\n[CV TRUNCATED]" : cvText;
+  const truncatedEmails = emails.map(e => e.length > 10000 ? e.substring(0, 10000) + "\n[EMAIL TRUNCATED]" : e);
   const emailContent = truncatedEmails.join("\n\n---\n\n");
-  
-  console.log(`[CLAUDE] Processing ${emails.length} emails, total content: ${emailContent.length} chars`);
 
-  const prompt = `You are a strict job-fit scoring assistant. Score each job against the candidate's ACTUAL CV using the 4-factor algorithm below.
+  const prompt = `You are an expert job-fit analyst. Extract EVERY job listing from the emails and score each against the candidate's CV.
 
-STEP 1 — Read the CV carefully. Extract:
-- Candidate's city/location
-- Real experience level (years, internships, student jobs)
-- Actual technical skills and tools listed
-- Education level and field
-- Languages spoken
-
-STEP 2 — Extract ALL unique jobs from the email alerts below. For each job, extract:
-- company
-- role
-- location
-- exp_required
-- job_link
-- linkedin_id (from URL if available)
-- company_domain (from email or link)
-
-STEP 3 — Score each job using this 4-factor algorithm:
-
-Factor 1: Location Match (0-3 points)
-- Same city as candidate: 3 points
-- Remote or "עבודה מרחוק": 3 points
-- Different city in same country: 1 point
-- Different country: 0 points
-
-Factor 2: Experience Match (0-3 points)
-- Job requires 0-2 years AND candidate has 0-2 years: 3 points
-- Job requires 3+ years AND candidate has 3+ years: 3 points
-- Job requires 3+ years BUT candidate has 0-2 years: 0 points (REJECT)
-- Job requires 0-2 years BUT candidate has 5+ years: 1 point
-
-Factor 3: Skills Match (0-3 points)
-- 80%+ of required skills in CV: 3 points
-- 50-79% of required skills in CV: 2 points
-- 20-49% of required skills in CV: 1 point
-- <20% of required skills in CV: 0 points
-
-Factor 4: Field Match (0-3 points)
-- Exact field match (e.g., Data Analyst for Data Analyst): 3 points
-- Related field (e.g., BI for Data Analyst): 2 points
-- Transferable field (e.g., Operations for Data Analyst): 1 point
-- Unrelated field: 0 points
-
-Total Score = Factor1 + Factor2 + Factor3 + Factor4 (0-12)
-
-Priority Assignment:
-- 10-12 points: "TOP MATCH"
-- 7-9 points: "GOOD FIT"
-- 4-6 points: "MAYBE"
-- 0-3 points: "REJECTED"
-
-IMPORTANT:
-- If experience mismatch (candidate has 0-2 years but job requires 3+): priority = "REJECTED", score ≤ 3
-- Extract EVERY job from the emails, up to 50 jobs
-- Return ONLY valid JSON
-
-CV:
+${ratingsSection}
+===== CANDIDATE CV =====
 ${truncatedCV}
+===== END CV =====
 
-EMAILS:
+STEP 1 — Read the CV and note: candidate's city, experience level, every explicit skill/tool, education, domains.
+
+STEP 2 — Extract EVERY job from the emails. Many emails are digests with MULTIPLE listings. Extract up to 60 total.
+IMPORTANT: If a job title is in Hebrew or another language, translate it to English for the "role" field.
+
+STEP 3 — Score each job (max 10 total):
+
+FACTOR 1 — CV SKILLS MATCH (0-4 pts)
+- 4 pts: 80%+ of requirements in CV
+- 3 pts: 60-80% covered
+- 2 pts: 40-60% covered
+- 1 pt: 20-40% covered
+- 0 pts: <20% covered
+Only count skills explicitly in the CV.
+
+FACTOR 2 — EXPERIENCE LEVEL (0-3 pts)
+- 3 pts: "student", "internship", "entry level", "0-1 years", "fresh graduate", "50%", "משרת סטודנט", "התמחות"
+- 2 pts: "junior", "1-2 years", or no experience stated
+- 1 pt: "2-3 years"
+- 0 pts: "3+ years" OR title has Senior/Lead/Principal/Manager/Director/Head/VP/Staff/Architect → force REJECTED
+
+FACTOR 3 — LOCATION (0-2 pts)
+- 2 pts: same city as candidate or within 10km
+- 1 pt: commutable ~40km (Tel Aviv metro from Kfar Saba)
+- 0 pts: Haifa, Jerusalem, Beer Sheva, south of Tel Aviv, Eilat → these locations also CAP score at 6 (cannot be HIGH)
+- remote → force REJECTED
+
+FACTOR 4 — FIELD RELEVANCE (0-1 pt)
+- 1 pt: data analysis, BI, analytics, business analysis, operations, industrial engineering, supply chain, logistics, product, finance analytics, data science, reporting
+- 0 pts: unrelated (pure sales, HR, marketing only, law, civil/mechanical engineering)
+
+PRIORITY:
+- HIGH: 8-10
+- MEDIUM: 5-7
+- LOW: 3-4
+- REJECTED: 1-2, OR senior/manager title, OR remote, OR 3+ years required
+
+REASON — EXACTLY 4 sentences, no more, no less:
+S1: Which specific skills/tools from the CV match this job's requirements (name them).
+S2: What is missing or only partially covered from the job requirements.
+S3: Experience level fit and location assessment (one sentence).
+S4: Overall verdict in one sentence.
+STRICT FORMAT: "Your [skill1] and [skill2] from [experience] match the [requirement]. The job requires [missing skills] which are not in your CV. [Level] fits your [student/junior] status and [city] is [commute assessment]. [Verdict]."
+Do NOT write paragraphs. Do NOT exceed 4 sentences. Be specific.
+
+LINK EXTRACTION:
+- job_link: direct company careers URL only. Empty if none. NEVER put linkedin.com in job_link.
+- linkedin_id: numeric ID from LinkedIn URL only (e.g. "4385024025"). Empty if none.
+
+COMPANY DOMAIN: main website domain using your knowledge of the company.
+
+===== JOB ALERT EMAILS =====
 ${emailContent}
+===== END EMAILS =====
 
-Return JSON:
+Return ONLY valid JSON. ASCII characters only (no Hebrew, no special quotes, no newlines inside strings):
 {
-  "jobs": [
-    {
-      "company": "...",
-      "role": "...",
-      "location": "...",
-      "score": 0-12,
-      "priority": "TOP MATCH|GOOD FIT|MAYBE|REJECTED",
-      "exp_required": "...",
-      "job_link": "...",
-      "linkedin_id": "...",
-      "company_domain": "...",
-      "reason": "Brief explanation of score",
-      "status": "New"
-    }
-  ]
+  "jobs": [{
+    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "company_domain": "", "reason": "", "status": "New"
+  }]
 }`;
 
-  const resp = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": Deno.env.get("CLAUDE_API_KEY")!,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 8192,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  const data = await resp.json();
+  if (!data.content?.[0]?.text) throw new Error("Claude returned no content: " + JSON.stringify(data));
+
+  const text = data.content[0].text;
+  
+  // Try to extract JSON robustly by finding balanced braces
+  let jsonStr = "";
+  const startIdx = text.indexOf("{");
+  if (startIdx === -1) throw new Error("No JSON found in Claude response");
+  
+  let depth = 0;
+  for (let i = startIdx; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    jsonStr += ch;
+    if (depth === 0) break;
+  }
+  
+  // Clean common JSON issues: trailing commas before ] or }
+  jsonStr = jsonStr.replace(/,\s*([}\]])/g, "$1");
+  // Remove control characters that break JSON (keep spaces)
+  jsonStr = jsonStr.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+  
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e: any) {
+    console.error("JSON parse failed, attempting regex extraction. Error:", e.message);
+    
+    try {
+      // Extract individual job objects using regex
+      const jobMatches: any[] = [];
+      const jobRegex = /"company"\s*:\s*"([^"]*)"\s*,\s*"role"\s*:\s*"([^"]*)"\s*,\s*"location"\s*:\s*"([^"]*)"\s*,\s*"score"\s*:\s*(\d+)\s*,\s*"priority"\s*:\s*"([^"]*)"\s*,\s*"exp_required"\s*:\s*"([^"]*)"\s*,\s*"job_link"\s*:\s*"([^"]*)"\s*,\s*"linkedin_id"\s*:\s*"([^"]*)"\s*,\s*"company_domain"\s*:\s*"([^"]*)"\s*,\s*"reason"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"status"\s*:\s*"([^"]*)"/g;
+      
+      let match;
+      while ((match = jobRegex.exec(jsonStr)) !== null) {
+        jobMatches.push({
+          company: match[1], role: match[2], location: match[3],
+          score: parseInt(match[4]), priority: match[5], exp_required: match[6],
+          job_link: match[7], linkedin_id: match[8], company_domain: match[9],
+          reason: match[10], status: match[11]
+        });
+      }
+      
+      if (jobMatches.length > 0) {
+        parsed = { jobs: jobMatches };
+        console.log(`Regex-extracted ${jobMatches.length} jobs from malformed JSON`);
+      } else {
+        // Fallback: truncation salvage
+        const lastComplete = jsonStr.lastIndexOf('"status"');
+        if (lastComplete > 0) {
+          const closingBrace = jsonStr.indexOf("}", lastComplete);
+          if (closingBrace > 0) {
+            const salvaged = jsonStr.substring(0, closingBrace + 1) + "]}";
+            parsed = JSON.parse(salvaged.replace(/,\s*([}\]])/g, "$1"));
+            console.log(`Salvaged ${parsed.jobs?.length || 0} jobs`);
+          } else {
+            throw e;
+          }
+        } else {
+          throw e;
+        }
+      }
+    } catch {
+      throw new Error("Failed to parse Claude JSON: " + e.message);
+    }
+  }
+  
+  return parsed.jobs || [];
+}
+
+async function generateCVForJob(job: any, cvText: string): Promise<string> {
+  const prompt = `You are a senior CV expert. Tailor this CV for the specific job.
+
+BASE CV:
+${cvText}
+
+TARGET JOB:
+- Company: ${job.company}
+- Role: ${job.role}
+- Location: ${job.location}
+- Fit Score: ${job.score}/10
+- Reason: ${job.reason}
+
+RULES:
+- Keep everything truthful, do not invent experience
+- Rewrite wording to be more impactful
+- Prioritize relevance to this job
+
+STRUCTURE:
+Full Name
+Location | Email | Phone | LinkedIn
+
+PROFESSIONAL SUMMARY
+3-4 strong lines tailored to the job
+
+SKILLS
+Data / Programming / Tools / Business
+
+EXPERIENCE
+Role | Company | Dates
+- 4-6 strong bullets
+
+PROJECTS
+
+EDUCATION
+
+LANGUAGES
+
+Return only the CV text.`;
+
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -299,93 +441,10 @@ Return JSON:
       max_tokens: 4096,
       messages: [{ role: "user", content: prompt }],
     }),
-    timeoutMs: 60000,
   });
 
   const data = await resp.json();
-  if (!resp.ok) {
-    throw new Error(`Claude API error ${resp.status}: ${JSON.stringify(data)}`);
-  }
-  if (!data.content?.[0]?.text) throw new Error("Claude returned no content: " + JSON.stringify(data));
-
-  const text = data.content[0].text;
-  console.log(`[CLAUDE] Response length: ${text.length} chars`);
-
-  let parsed: any;
-  const jsonMatch = text.match(/\{[\s\S]*"jobs"[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("No JSON found in Claude response");
-  }
-
-  const jsonStr = jsonMatch[0];
-  try {
-    parsed = JSON.parse(jsonStr);
-    console.log(`[CLAUDE] Extracted ${parsed.jobs?.length || 0} jobs`);
-  } catch {
-    const jobMatches = [...jsonStr.matchAll(/\{[^{}]*"company"[^{}]*\}/g)];
-    if (jobMatches.length > 0) {
-      parsed = { jobs: jobMatches.map(m => JSON.parse(m[0])) };
-      console.log(`[CLAUDE] Regex-extracted ${jobMatches.length} jobs from malformed JSON`);
-    } else {
-      throw new Error("Failed to parse JSON from Claude");
-    }
-  }
-
-  return parsed.jobs || [];
-}
-
-function smartFilterEmails(emails: EmailWithTimestamp[]): EmailWithTimestamp[] {
-  const skipPatterns = [
-    /profile views/i,
-    /has a new post/i,
-    /shared an article/i,
-    /commented on/i,
-    /liked your/i,
-    /connection request/i,
-    /endorsement/i,
-    /congratulations/i,
-    /recommendations/i,
-    /updates-noreply@linkedin/i,
-    /messages-noreply@linkedin/i,
-    /newsletters-noreply@linkedin/i,
-    /invitation to connect/i,
-    /wants to connect/i,
-    /accepted your invitation/i
-  ];
-  
-  const jobIndicators = [
-    /is hiring/i,
-    /new job/i,
-    /job alert/i,
-    /posted on/i,
-    /position/i,
-    /role/i,
-    /opportunity/i,
-    /jobalerts-noreply@linkedin/i,
-    /jobs-noreply@linkedin/i
-  ];
-
-  const filtered = emails.filter(email => {
-    const subject = email.subject;
-    const from = email.from;
-    
-    const isSkippable = skipPatterns.some(pattern => pattern.test(subject) || pattern.test(from));
-    if (isSkippable) {
-      console.log(`[FILTER] Skipping: "${subject}"`);
-      return false;
-    }
-    
-    const isJobEmail = jobIndicators.some(pattern => pattern.test(subject) || pattern.test(from));
-    if (!isJobEmail) {
-      console.log(`[FILTER] Skipping non-job: "${subject}"`);
-      return false;
-    }
-    
-    return true;
-  });
-
-  console.log(`[FILTER] Filtered ${emails.length} → ${filtered.length} job emails`);
-  return filtered;
+  return data.content?.[0]?.text || "";
 }
 
 Deno.serve(async (req) => {
@@ -393,168 +452,328 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Use Cloud Supabase (auto-set env vars)
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  // Extract user — supports normal JWT auth OR service-role call with userId in body
   const authHeader = req.headers.get("Authorization") || "";
   const token = authHeader.replace("Bearer ", "");
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const isServiceCall = token === serviceRoleKey;
+
+  let userId: string;
+  let userEmail: string | undefined;
+
+  if (isServiceCall) {
+    // Called by scheduled-scan — userId must be in request body
+    const body = await req.json().catch(() => ({}));
+    userId = body.userId;
+    userEmail = body.userEmail;
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "userId required for service calls" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  } else {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    userId = user.id;
+    userEmail = user.email;
   }
-  const userId = user.id;
+
+  // Fetch user's profile for CV text and Gmail credentials
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("cv_text, full_name, city, google_refresh_token")
+    .eq("id", userId)
+    .single();
+
+  // Determine how far back to look — since last successful scan, or 48h fallback
+  const { data: lastScan } = await supabase
+    .from("scan_runs")
+    .select("started_at")
+    .eq("user_id", userId)
+    .eq("success", true)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // Feature 5: First scan ever uses 7 days back; subsequent scans use last scan timestamp
+  const fallbackAfter = Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
+  const afterTimestamp = lastScan?.started_at
+    ? Math.floor(new Date(lastScan.started_at).getTime() / 1000)
+    : fallbackAfter;
+  console.log(`Scanning emails after: ${new Date(afterTimestamp * 1000).toISOString()} (${lastScan ? "last scan" : "48h fallback"})`);
+
+  let jobsFound = 0;
+  let jobsAdded = 0;
+  const skippedDetails: { company: string; role: string; reason: string }[] = [];
 
   try {
-    console.log(`[SCAN] Starting incremental scan for user ${userId}`);
-
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("cv_text, google_refresh_token, last_email_scan_timestamp")
-      .eq("user_id", userId)
-      .single();
-
-    if (!profile) {
-      throw new Error("User profile not found");
+    // 1. Get Google access token — use user's own token, fall back to shared env var
+    const refreshToken = (profile as any)?.google_refresh_token || Deno.env.get("GOOGLE_REFRESH_TOKEN");
+    if (!refreshToken) {
+      throw new Error("Gmail not connected. Please connect your Gmail account in Settings.");
     }
+    console.log("Step 1: Getting Google access token...");
+    const accessToken = await getGoogleAccessToken(refreshToken);
+    console.log("Step 1: OK");
 
-    const googleRefreshToken = (profile as any)?.google_refresh_token;
-    if (!googleRefreshToken) {
-      throw new Error("Google account not connected. Please reconnect Gmail in Settings.");
-    }
-
-    const cvText = profile?.cv_text || "";
-    const lastScanTimestamp = (profile as any)?.last_email_scan_timestamp || 0;
-
-    console.log(`[SCAN] Last scan: ${lastScanTimestamp} (${new Date(lastScanTimestamp).toISOString()})`);
-
-    const accessToken = await getGoogleAccessToken(googleRefreshToken);
-
-    // Fetch and filter emails
-    const allEmails = await fetchJobAlertEmails(accessToken, lastScanTimestamp);
-    const filteredEmails = smartFilterEmails(allEmails);
-    
-    // Take only first 10 emails
-    const MAX_EMAILS_PER_RUN = 10;
-    const emailsToProcess = filteredEmails.slice(0, MAX_EMAILS_PER_RUN);
-    
-    console.log(`[SCAN] Processing ${emailsToProcess.length}/${filteredEmails.length} emails (max ${MAX_EMAILS_PER_RUN})`);
-
-    if (emailsToProcess.length === 0) {
-      console.log(`[SCAN] No new emails to process`);
-      return new Response(JSON.stringify({ 
-        success: true, 
-        jobsAdded: 0, 
-        emailsProcessed: 0,
-        message: "No new emails to process"
-      }), {
+    // 2. Fetch emails since last scan
+    console.log("Step 2: Fetching emails...");
+    const emails = await fetchJobAlertEmails(accessToken, afterTimestamp);
+    console.log(`Step 2: Got ${emails.length} emails`);
+    if (emails.length === 0) {
+      await supabase.from("scan_runs").insert({
+        user_id: userId,
+        success: true,
+        jobs_found: 0,
+        jobs_added: 0,
+      });
+      return new Response(JSON.stringify({ jobs_found: 0, jobs_added: 0, jobs_skipped_duplicate: 0, jobs_skipped_error: 0, skipped_details: [] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Process in batches of 5
-    const BATCH_SIZE = 5;
-    let totalJobsInserted = 0;
-    let latestEmailTimestamp = lastScanTimestamp;
+    // 3. Get CV text — prefer user's stored CV, fallback to Google Drive
+    let cvText = profile?.cv_text || "";
+    console.log(`Step 3: CV from profile: ${cvText ? cvText.length + " chars" : "none, fetching from Drive"}`);
+    if (!cvText) {
+      cvText = await fetchCVFromDrive(accessToken);
+      console.log(`Step 3: CV from Drive: ${cvText.length} chars`);
+    }
 
-    for (let i = 0; i < emailsToProcess.length; i += BATCH_SIZE) {
-      const batch = emailsToProcess.slice(i, i + BATCH_SIZE);
-      const batchIndex = Math.floor(i / BATCH_SIZE) + 1;
-      const totalBatches = Math.ceil(emailsToProcess.length / BATCH_SIZE);
-      
-      console.log(`\n[BATCH ${batchIndex}/${totalBatches}] Processing ${batch.length} emails`);
-      
-      for (const email of batch) {
-        console.log(`[BATCH ${batchIndex}]   - "${email.subject}" (${new Date(email.internalDate).toISOString()})`);
+    // 3b. Feature 6: Fetch user's past ratings for calibration — get all rated jobs, sorted by biggest mismatch first
+    const { data: ratedJobsData } = await supabase
+      .from("jobs")
+      .select("company, role, score, user_score, priority")
+      .eq("user_id", userId)
+      .not("user_score", "is", null)
+      .limit(60);
+    // Sort by biggest mismatch (normalized AI score vs user rating) to give Claude the most informative examples
+    const allRated = ((ratedJobsData || []) as { company: string; role: string; score: number; user_score: number; priority: string }[])
+      .sort((a, b) => {
+        const mismatchA = Math.abs(a.score / 10 - a.user_score / 5);
+        const mismatchB = Math.abs(b.score / 10 - b.user_score / 5);
+        return mismatchB - mismatchA;
+      });
+    const ratingsSection = buildRatingsSection(allRated);
+    console.log(`Step 3b: ${allRated.length} rated jobs for calibration`);
+
+    // 3c. Feature 8: Try to enrich emails with LinkedIn descriptions for jobs that have linkedin_id
+    // (best-effort, no failure if it doesn't work)
+    const emailsWithLinkedIn = await Promise.all(
+      emails.map(async (emailText) => {
+        const linkedinIds = [...emailText.matchAll(/linkedin\.com\/(?:comm\/)?jobs\/view\/(\d+)/gi)].map(m => m[1]);
+        if (linkedinIds.length === 0) return emailText;
+        const descriptions = await Promise.all(linkedinIds.map(id => fetchLinkedInDescription(id)));
+        const enrichment = descriptions.filter(Boolean).map((d, i) => `\n[LinkedIn Description for job ${linkedinIds[i]}]: ${d}`).join("");
+        return emailText + enrichment;
+      })
+    );
+    console.log(`Step 3c: LinkedIn enrichment done`);
+
+    // 4. Analyze with Claude
+    console.log("Step 4: Calling Claude...");
+    const jobs = await analyzeWithClaude(emailsWithLinkedIn, cvText, ratingsSection);
+    console.log(`Step 4: Claude returned ${jobs.length} jobs`);
+    jobsFound = jobs.length;
+
+    // 5. Post-process: enforce hard scoring rules
+    const SENIOR_TITLES = /\b(senior|lead|principal|manager|director|head|vp|staff|architect)\b/i;
+    const HIGH_EXP = /\b(3\+|4\+|5\+|6\+|7\+|8\+|3-5|5-7|3 years|4 years|5 years)\b/i;
+    const RELEVANT_FIELDS = /\b(data|analy|operations|business|project.?manag|supply.?chain|logistics|industrial.?engineer|BI|reporting|excel|sql|python|planning|procurement|product)\b/i;
+    const REMOTE_JOB = /\b(remote|עבודה מרחוק|work from home|WFH)\b/i;
+    // Far locations: not commutable from Kfar Saba → cap score at MEDIUM max
+    const FAR_LOCATION = /\b(haifa|jerusalem|be.?er sheva|beer sheva|eilat|nazareth|nazeret|migdal haemek|karmiel|חיפה|ירושלים|באר שבע|אילת)\b/i;
+
+    for (const job of jobs) {
+      const title = (job.role || '').trim();
+      const exp = (job.exp_required || '').trim();
+      const location = (job.location || '').trim();
+
+      // Hard rule: senior titles → max score 3, REJECTED
+      if (SENIOR_TITLES.test(title)) {
+        job.score = Math.min(job.score, 3);
+        job.priority = "REJECTED";
+        if (!job.reason.includes("senior")) {
+          job.reason = `Score ${job.score} — title contains senior-level keyword, not suitable for student. ${job.reason}`;
+        }
       }
 
-      // Extract jobs from batch
-      const claudeCall = await callClaudeWithRetry(
-        async () => await analyzeWithClaude(batch.map(e => e.fullEmail), cvText),
-        (attempt, delayMs, err) => {
-          console.log(`[BATCH ${batchIndex}] Retry ${attempt}/3 in ${delayMs}ms: ${err?.message}`);
-        },
-      );
+      // Hard rule: high experience → max score 3, REJECTED
+      if (HIGH_EXP.test(exp)) {
+        job.score = Math.min(job.score, 3);
+        job.priority = "REJECTED";
+        if (!job.reason.includes("experience")) {
+          job.reason = `Score ${job.score} — requires ${exp} experience, Dor is a 3rd year student. ${job.reason}`;
+        }
+      }
 
-      if (!claudeCall.ok) {
-        console.error(`[BATCH ${batchIndex}] Failed: ${claudeCall.error}`);
+      // Hard rule: remote jobs → REJECTED
+      if (REMOTE_JOB.test(location) || REMOTE_JOB.test(title)) {
+        job.priority = "REJECTED";
+        if (!job.reason.includes("remote")) {
+          job.reason = `${job.reason} [Remote job — auto-rejected per policy.]`;
+        }
+      }
+
+      // Hard rule: far locations (Haifa, Jerusalem, Beer Sheva) → cap at MEDIUM (score ≤ 6)
+      if (FAR_LOCATION.test(location) && job.priority !== "REJECTED") {
+        job.score = Math.min(job.score, 6);
+        if (job.priority === "HIGH") job.priority = "MEDIUM";
+      }
+
+      // Hard rule: unrelated field → max score 4, LOW
+      if (!RELEVANT_FIELDS.test(title) && !RELEVANT_FIELDS.test(job.reason)) {
+        job.score = Math.min(job.score, 4);
+        if (job.priority !== "REJECTED") job.priority = "LOW";
+      }
+
+      // Ensure priority matches score
+      if (job.score <= 2) job.priority = "REJECTED";
+      else if (job.score <= 4 && job.priority !== "REJECTED") job.priority = "LOW";
+      else if (job.score <= 6 && job.priority === "HIGH") job.priority = "MEDIUM";
+    }
+
+    // 6. Clean up job links and insert new jobs — skip duplicates entirely
+    for (const job of jobs) {
+      // Extract linkedin_id from job_link if it's a LinkedIn URL
+      if (job.job_link) {
+        const linkedinMatch = job.job_link.match(/linkedin\.com\/(?:comm\/)?jobs\/view\/(\d+)/i);
+        if (linkedinMatch) {
+          if (!job.linkedin_id) job.linkedin_id = linkedinMatch[1];
+          job.job_link = "";
+        }
+      }
+
+      // Clean linkedin_id to just digits
+      if (job.linkedin_id) {
+        const idMatch = job.linkedin_id.match(/(\d+)/);
+        job.linkedin_id = idMatch ? idMatch[1] : "";
+      }
+
+      // Fallback: if no job_link and we have linkedin_id, construct LinkedIn URL as job_link
+      // so every job has at least one working link
+      const hasCompanyLink = job.job_link?.trim() && job.job_link.trim().startsWith("http");
+      if (!hasCompanyLink && !job.linkedin_id) {
+        // No link at all — leave as is (rare edge case)
+      }
+
+      // Build fingerprint
+      const linkedinFp = job.linkedin_id ? `linkedin::${job.linkedin_id}` : "";
+      const linkFp = job.job_link?.trim().toLowerCase();
+      const hasValidLink = linkFp && linkFp.startsWith("http");
+      const fingerprint = linkedinFp
+        || (hasValidLink ? `link::${linkFp}` : `meta::${(job.company || '').trim().toLowerCase()}__${(job.role || '').trim().toLowerCase()}__${(job.location || '').trim().toLowerCase()}`);
+
+      // Check by fingerprint — if exists, skip entirely
+      const { data: existing } = await supabase
+        .from("jobs")
+        .select("id")
+        .eq("fingerprint", fingerprint)
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        console.log(`SKIP duplicate fingerprint: ${job.company} — ${job.role} (fp: ${fingerprint})`);
+        skippedDetails.push({ company: job.company, role: job.role, reason: "duplicate_fingerprint" });
         continue;
       }
 
-      const jobs = claudeCall.value || [];
-      console.log(`[BATCH ${batchIndex}] Extracted ${jobs.length} jobs`);
+      // Also check by company + role to catch near-duplicates
+      const { data: byCompanyRole } = await supabase
+        .from("jobs")
+        .select("id")
+        .ilike("company", (job.company || '').trim())
+        .ilike("role", (job.role || '').trim())
+        .limit(1)
+        .maybeSingle();
 
-      // Insert jobs immediately
-      if (jobs.length > 0) {
-        const rowsToInsert = jobs.map(job => ({
-          user_id: userId,
-          company: job.company || "Unknown",
-          role: job.role || "Unknown",
-          location: job.location || "",
-          score: job.score || 0,
-          priority: job.priority || "MAYBE",
-          exp_required: job.exp_required || "",
-          job_link: job.job_link || "",
-          linkedin_id: job.linkedin_id || "",
-          company_domain: job.company_domain || "",
-          reason: job.reason || "",
-          status: "New",
-          fingerprint: `${job.company}-${job.role}-${job.location}`.toLowerCase().replace(/\s+/g, "-"),
-        }));
+      if (byCompanyRole) {
+        console.log(`SKIP duplicate company+role: ${job.company} — ${job.role}`);
+        skippedDetails.push({ company: job.company, role: job.role, reason: "duplicate_company_role" });
+        continue;
+      }
 
-        const { data: inserted, error: insertError } = await supabase
-          .from("jobs")
-          .upsert(rowsToInsert, { onConflict: "fingerprint", ignoreDuplicates: true })
-          .select("fingerprint");
+      // New job — insert
+      const { error: insertError } = await supabase.from("jobs").insert({
+        user_id: userId,
+        company: job.company,
+        role: job.role,
+        location: job.location,
+        score: job.score,
+        priority: job.priority,
+        reason: job.reason,
+        exp_required: job.exp_required,
+        job_link: (job.job_link?.trim() && job.job_link.trim().startsWith("http")) ? job.job_link : null,
+        linkedin_id: job.linkedin_id || null,
+        company_domain: job.company_domain || null,
+        status: job.status || "New",
+        fingerprint,
+        alert_date: new Date().toISOString(),
+      });
 
-        if (insertError) {
-          console.error(`[BATCH ${batchIndex}] Insert error:`, insertError);
+      if (insertError) {
+        if (insertError.code === "23505") {
+          console.log(`SKIP unique constraint: ${job.company} — ${job.role}`);
+          skippedDetails.push({ company: job.company, role: job.role, reason: "duplicate_constraint" });
         } else {
-          const insertedCount = inserted?.length || 0;
-          totalJobsInserted += insertedCount;
-          console.log(`[BATCH ${batchIndex}] Inserted ${insertedCount}/${jobs.length} jobs (${jobs.length - insertedCount} duplicates)`);
+          console.error(`SKIP insert error: ${job.company} — ${job.role}:`, insertError);
+          skippedDetails.push({ company: job.company, role: job.role, reason: `error: ${insertError.message}` });
         }
-      }
-
-      // Update latest timestamp
-      for (const email of batch) {
-        if (email.internalDate > latestEmailTimestamp) {
-          latestEmailTimestamp = email.internalDate;
-        }
-      }
-    }
-
-    // Update last_email_scan_timestamp
-    if (latestEmailTimestamp > lastScanTimestamp) {
-      const { error: updateError } = await supabase
-        .from("user_profiles")
-        .update({ last_email_scan_timestamp: latestEmailTimestamp })
-        .eq("user_id", userId);
-
-      if (updateError) {
-        console.error(`[SCAN] Failed to update timestamp:`, updateError);
       } else {
-        console.log(`[SCAN] Updated last_email_scan_timestamp to ${latestEmailTimestamp} (${new Date(latestEmailTimestamp).toISOString()})`);
+        jobsAdded++;
       }
     }
 
-    console.log(`\n[SCAN] Complete: ${totalJobsInserted} jobs inserted, ${emailsToProcess.length} emails processed`);
+    // 6. Save scan result
+    await supabase.from("scan_runs").insert({
+      user_id: userId,
+      success: true,
+      jobs_found: jobsFound,
+      jobs_added: jobsAdded,
+    });
+
+    // Feature 4: Send email digest if new HIGH jobs were found
+    if (jobsAdded > 0 && userEmail) {
+      const addedJobsList = jobs.filter(j => j.priority !== "REJECTED").slice(0, jobsAdded);
+      await sendEmailDigest(userEmail, addedJobsList);
+    }
+
+    const skipDuplicate = skippedDetails.filter(s => s.reason.startsWith("duplicate")).length;
+    const skipError = skippedDetails.filter(s => s.reason.startsWith("error")).length;
+
+    console.log(`Scan complete: found=${jobsFound}, added=${jobsAdded}, skipped_duplicate=${skipDuplicate}, skipped_error=${skipError}`);
+    for (const s of skippedDetails) {
+      console.log(`  Skipped: ${s.company} — ${s.role} [${s.reason}]`);
+    }
 
     return new Response(JSON.stringify({
-      success: true,
-      jobsAdded: totalJobsInserted,
-      emailsProcessed: emailsToProcess.length,
-      lastScanTimestamp: latestEmailTimestamp
+      jobs_found: jobsFound,
+      jobs_added: jobsAdded,
+      jobs_skipped_duplicate: skipDuplicate,
+      jobs_skipped_error: skipError,
+      skipped_details: skippedDetails,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-
   } catch (error: any) {
-    console.error(`[SCAN] Error:`, error);
+    console.error("Scan error:", error);
+    await supabase.from("scan_runs").insert({
+      user_id: userId,
+      success: false,
+      jobs_found: jobsFound,
+      jobs_added: jobsAdded,
+      error_text: error.message || "Unknown error",
+    });
     return new Response(JSON.stringify({ error: error.message || "Scan failed" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

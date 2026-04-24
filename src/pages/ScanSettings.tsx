@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/supabase-external';
 import { runDailyScan } from '@/lib/api';
@@ -9,13 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Radar, Mail, Brain, FileText, Clock, Upload, User, MapPin, Save, CheckCircle2, AtSign, Lock, Camera } from 'lucide-react';
+import { Loader2, Radar, Mail, Brain, FileText, Clock, Upload, User, MapPin, Save, CheckCircle2, AtSign, Lock, Camera, RefreshCw, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 
 export default function ScanSettings() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [scanning, setScanning] = useState(false);
   const [scans, setScans] = useState<ScanRun[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +38,23 @@ export default function ScanSettings() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [connectingGmail, setConnectingGmail] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
+
+  // Handle ?gmail= callback from OAuth redirect
+  useEffect(() => {
+    const gmailParam = searchParams.get('gmail');
+    if (gmailParam === 'connected') {
+      toast.success('Gmail connected successfully!');
+      setGmailConnected(true);
+      setSearchParams({}, { replace: true });
+    } else if (gmailParam === 'error') {
+      const reason = searchParams.get('reason') || 'unknown';
+      toast.error(`Gmail connection failed: ${reason}`);
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -46,9 +65,38 @@ export default function ScanSettings() {
       setCvText((data as any).cv_text || '');
       setCvFilename((data as any).cv_filename || '');
       setAvatarUrl((data as any).avatar_url || '');
+      setGmailConnected(!!(data as any).google_refresh_token);
     }
     setEmail(user?.email || '');
     setProfileLoading(false);
+  };
+
+  const handleReanalyzeJobs = async () => {
+    setReanalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('reanalyze-jobs');
+      if (error) throw new Error(error.message || 'Reanalysis failed');
+      toast.success(`Updated ${data.updated} job${data.updated !== 1 ? 's' : ''} with improved reasoning.`);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to reanalyze jobs');
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
+  const handleConnectGmail = async () => {
+    if (!user) return;
+    setConnectingGmail(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('gmail-oauth-start', {
+        body: { redirect_url: `${window.location.origin}/settings` },
+      });
+      if (error || !data?.url) throw new Error(error?.message || 'Failed to get OAuth URL');
+      window.location.href = data.url;
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to start Gmail connection');
+      setConnectingGmail(false);
+    }
   };
 
   const fetchScans = async () => {
@@ -66,6 +114,10 @@ export default function ScanSettings() {
     if (!user) return;
     setSaving(true);
     try {
+      // Get old CV to detect if CV actually changed
+      const { data: oldProfile } = await supabase.from('user_profiles').select('cv_text').eq('id', user.id).single();
+      const cvChanged = cvText !== (oldProfile as any)?.cv_text;
+
       const { error } = await supabase.from('user_profiles').update({
         full_name: fullName,
         city,
@@ -73,6 +125,15 @@ export default function ScanSettings() {
       }).eq('id', user.id);
       if (error) throw error;
       toast.success('Profile updated!');
+
+      // Auto-rescore all jobs when CV changes
+      if (cvChanged && cvText) {
+        toast.info('CV changed — re-scoring your jobs in background...');
+        supabase.functions.invoke('reanalyze-jobs', { body: { forceAll: true } }).then(({ data, error: rescoreErr }) => {
+          if (rescoreErr) return;
+          if (data?.updated > 0) toast.success(`Re-scored ${data.updated} jobs with your new CV.`);
+        });
+      }
     } catch (e: any) {
       toast.error(e.message || 'Failed to save');
     } finally {
@@ -216,7 +277,12 @@ export default function ScanSettings() {
       toast.success(`Scan complete! Found ${result.jobs_found} jobs, added ${result.jobs_added} new.`);
       fetchScans();
     } catch (e: any) {
-      toast.error(e.message || 'Scan failed');
+      if (e.message === 'GMAIL_RECONNECT_REQUIRED') {
+        toast.error('Gmail connection expired — please reconnect.', { duration: 8000 });
+        handleConnectGmail();
+      } else {
+        toast.error(e.message || 'Scan failed');
+      }
     } finally {
       setScanning(false);
     }
@@ -454,11 +520,43 @@ export default function ScanSettings() {
           <div className="space-y-3">
             <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
               <Mail className="h-5 w-5 text-primary shrink-0" />
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">Gmail Source</p>
                 <p className="text-xs text-muted-foreground">Label: "Job Alerts" — Last 24 hours</p>
               </div>
-              <Badge variant="outline" className="ml-auto">Active</Badge>
+              {gmailConnected ? (
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant="outline" className="text-[hsl(var(--success))] border-[hsl(var(--success)/0.4)] bg-[hsl(var(--success)/0.08)]">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={connectingGmail}
+                    onClick={handleConnectGmail}
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {connectingGmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    <span className="ml-1">Reconnect</span>
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={connectingGmail}
+                  onClick={handleConnectGmail}
+                  className="shrink-0 h-7 px-3 text-xs gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10"
+                >
+                  {connectingGmail ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <AlertCircle className="h-3.5 w-3.5" />
+                  )}
+                  Connect Gmail
+                </Button>
+              )}
             </div>
             <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
               <Brain className="h-5 w-5 text-accent shrink-0" />
@@ -488,6 +586,10 @@ export default function ScanSettings() {
           <Button onClick={handleScan} disabled={scanning} className="w-full gap-2" size="lg">
             {scanning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Radar className="h-5 w-5" />}
             {scanning ? 'Running Scan...' : 'Run Manual Scan'}
+          </Button>
+          <Button onClick={handleReanalyzeJobs} disabled={reanalyzing} variant="outline" className="w-full gap-2" size="sm">
+            {reanalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+            {reanalyzing ? 'Re-analyzing...' : 'Fix Old Job Reasoning'}
           </Button>
         </CardContent>
       </Card>

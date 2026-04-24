@@ -1,15 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
 
-const CLOUD_URL = import.meta.env.VITE_SUPABASE_URL;
-
-async function getAuthHeaders() {
-  const { data: { session } } = await supabase.auth.getSession();
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${session?.access_token}`,
-  };
-}
-
 export async function runDailyScan(): Promise<{
   jobs_found: number;
   jobs_added: number;
@@ -17,28 +7,23 @@ export async function runDailyScan(): Promise<{
   jobs_skipped_error?: number;
   skipped_details?: { company: string; role: string; reason: string }[];
 }> {
-  const headers = await getAuthHeaders();
-  const resp = await fetch(`${CLOUD_URL}/functions/v1/daily-scan`, {
-    method: 'POST',
-    headers,
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ error: 'Scan failed' }));
-    throw new Error(err.error || 'Scan failed');
+  const { data, error } = await supabase.functions.invoke('daily-scan');
+  if (error) {
+    // Try to get the actual error body from the function response
+    let msg = error.message || 'Scan failed';
+    try {
+      const body = await (error as any).context?.json?.();
+      if (body?.error) msg = body.error;
+    } catch {}
+    throw new Error(msg);
   }
-  return resp.json();
+  return data;
 }
 
 export async function generateCV(jobId: string): Promise<{ success: boolean }> {
-  const headers = await getAuthHeaders();
-  const resp = await fetch(`${CLOUD_URL}/functions/v1/generate-cv`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ jobId }),
+  const { data, error } = await supabase.functions.invoke('generate-cv', {
+    body: { jobId },
   });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ error: 'CV generation failed' }));
-    throw new Error(err.error || 'CV generation failed');
-  }
-  return resp.json();
+  if (error) throw new Error(error.message || 'CV generation failed');
+  return data;
 }

@@ -5,10 +5,10 @@ import { db } from '@/lib/supabase-external';
 import { runDailyScan } from '@/lib/api';
 import { Job, ScanRun } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, AlertTriangle, FileText, Loader2, Radar, ArrowRight, CheckCircle2, XCircle, Send, BarChart3, User, CalendarClock } from 'lucide-react';
+import { Briefcase, AlertTriangle, FileText, Loader2, Radar, ArrowRight, CheckCircle2, XCircle, Send, BarChart3, User, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import JobDetailPanel from '@/components/JobDetailPanel';
 import CompanyLogo from '@/components/CompanyLogo';
 
@@ -19,14 +19,19 @@ const priorityClass: Record<string, string> = {
   REJECTED: 'bg-priority-rejected priority-rejected border',
 };
 
-function ScoreBadge({ score }: { score: number }) {
-  const cls = score >= 8 ? 'score-pill-high' : score >= 6 ? 'score-pill-medium' : 'score-pill-low';
-  return (
-    <span className={`${cls} rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums`}>
-      {score}/10
-    </span>
-  );
-}
+const PRIORITY_COLORS: Record<string, string> = {
+  HIGH: 'hsl(155 100% 49%)',
+  MEDIUM: 'hsl(38 92% 50%)',
+  LOW: 'hsl(25 95% 53%)',
+  REJECTED: 'hsl(0 72% 51%)',
+};
+
+const SCORE_COLORS = [
+  'hsl(0 72% 51%)', 'hsl(0 72% 51%)', 'hsl(0 72% 51%)',
+  'hsl(25 95% 53%)', 'hsl(25 95% 53%)',
+  'hsl(38 92% 50%)', 'hsl(38 92% 50%)', 'hsl(38 92% 50%)',
+  'hsl(155 100% 49%)', 'hsl(155 100% 49%)', 'hsl(155 100% 49%)',
+];
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -35,14 +40,63 @@ function getGreeting() {
   return 'Good evening';
 }
 
-const PRIORITY_COLORS: Record<string, string> = {
-  HIGH: 'hsl(155 100% 49%)',
-  MEDIUM: 'hsl(38 92% 50%)',
-  LOW: 'hsl(25 95% 53%)',
-  REJECTED: 'hsl(0 72% 51%)',
-};
+function MetricArc({ value, label, description }: { value: number | null; label: string; description: string }) {
+  const pct = value !== null ? value * 100 : 0;
+  const radius = 38;
+  const circumference = 2 * Math.PI * radius;
+  const offset = value !== null ? circumference - (pct / 100) * circumference : circumference;
+  const color = value === null ? 'hsl(225 12% 35%)'
+    : value >= 0.7 ? 'hsl(155 100% 49%)'
+    : value >= 0.5 ? 'hsl(38 92% 50%)'
+    : 'hsl(0 72% 51%)';
+  const bgColor = value === null ? 'transparent'
+    : value >= 0.7 ? 'hsl(155 100% 49% / 0.06)'
+    : value >= 0.5 ? 'hsl(38 92% 50% / 0.06)'
+    : 'hsl(0 72% 51% / 0.06)';
+  const borderColor = value === null ? 'hsl(232 18% 22%)'
+    : value >= 0.7 ? 'hsl(155 100% 49% / 0.2)'
+    : value >= 0.5 ? 'hsl(38 92% 50% / 0.2)'
+    : 'hsl(0 72% 51% / 0.2)';
 
-const SCORE_COLORS = ['hsl(0 72% 51%)', 'hsl(0 72% 51%)', 'hsl(0 72% 51%)', 'hsl(25 95% 53%)', 'hsl(25 95% 53%)', 'hsl(38 92% 50%)', 'hsl(38 92% 50%)', 'hsl(38 92% 50%)', 'hsl(155 100% 49%)', 'hsl(155 100% 49%)', 'hsl(155 100% 49%)'];
+  return (
+    <div className="flex flex-col items-center gap-3 p-4 rounded-xl border flex-1"
+      style={{ backgroundColor: bgColor, borderColor }}>
+      <div className="relative">
+        <svg className="-rotate-90" width="92" height="92" viewBox="0 0 92 92">
+          <circle cx="46" cy="46" r={radius} fill="none" stroke="hsl(232 18% 18%)" strokeWidth="6" />
+          <circle
+            cx="46" cy="46" r={radius} fill="none"
+            stroke={color} strokeWidth="6" strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-xl font-display font-bold tabular-nums" style={{ color }}>
+            {value !== null ? `${Math.round(pct)}%` : '—'}
+          </span>
+        </div>
+      </div>
+      <div className="text-center">
+        <p className="font-semibold text-sm">{label}</p>
+        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+function ScoreBadge({ score }: { score: number }) {
+  const color = score >= 8 ? 'hsl(155 100% 49%)' : score >= 6 ? 'hsl(38 92% 50%)' : 'hsl(0 72% 51%)';
+  const bg = score >= 8 ? 'hsl(155 100% 49% / 0.12)' : score >= 6 ? 'hsl(38 92% 50% / 0.12)' : 'hsl(0 72% 51% / 0.12)';
+  const border = score >= 8 ? 'hsl(155 100% 49% / 0.3)' : score >= 6 ? 'hsl(38 92% 50% / 0.3)' : 'hsl(0 72% 51% / 0.3)';
+  return (
+    <span className="rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums border"
+      style={{ color, backgroundColor: bg, borderColor: border }}>
+      {score}/10
+    </span>
+  );
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -97,22 +151,16 @@ export default function Dashboard() {
     }
   };
 
-  const todayJobs = jobs.filter(j => {
-    const d = new Date(j.created_at);
-    const now = new Date();
-    return d.toDateString() === now.toDateString();
-  });
   const highPriority = jobs.filter(j => j.priority === 'HIGH').length;
   const cvsGenerated = jobs.filter(j => j.tailored_cv).length;
   const appliedCount = jobs.filter(j => j.status === 'Applied' || j.status === 'Interviewing' || j.status === 'Offer').length;
   const lastScan = scans[0];
 
-  const topJobs = [...todayJobs]
+  const topJobs = [...jobs]
     .sort((a, b) => b.score - a.score)
     .filter(j => j.priority !== 'REJECTED')
     .slice(0, 5);
 
-  // Analytics data
   const scoreDistribution = Array.from({ length: 11 }, (_, i) => ({
     score: i.toString(),
     count: jobs.filter(j => j.score === i).length,
@@ -123,6 +171,32 @@ export default function Dashboard() {
     .map(p => ({ name: p, value: jobs.filter(j => j.priority === p).length, color: PRIORITY_COLORS[p] }))
     .filter(d => d.value > 0);
 
+  const totalPriority = priorityBreakdown.reduce((s, p) => s + p.value, 0);
+
+  // Application pipeline
+  const pipeline = [
+    { label: 'New', count: jobs.filter(j => j.status === 'New').length, color: 'hsl(214 100% 65%)' },
+    { label: 'Applied', count: jobs.filter(j => j.status === 'Applied').length, color: 'hsl(38 92% 50%)' },
+    { label: 'Interviewing', count: jobs.filter(j => j.status === 'Interviewing').length, color: 'hsl(155 100% 49%)' },
+    { label: 'Offer', count: jobs.filter(j => j.status === 'Offer').length, color: 'hsl(155 100% 70%)' },
+  ];
+  const maxPipelineCount = Math.max(...pipeline.map(s => s.count), 1);
+
+  // ML metrics
+  const rated = jobs.filter(j => j.user_score !== null && j.user_score !== undefined);
+  const hasMetrics = rated.length >= 3;
+  let precision: number | null = null, recall: number | null = null, accuracy: number | null = null;
+  let TP = 0, FP = 0, FN = 0, TN = 0;
+  if (hasMetrics) {
+    TP = rated.filter(j => j.user_score! >= 4 && j.priority === 'HIGH').length;
+    FP = rated.filter(j => j.user_score! <= 2 && j.priority === 'HIGH').length;
+    FN = rated.filter(j => j.user_score! >= 4 && j.priority !== 'HIGH').length;
+    TN = rated.filter(j => j.user_score! <= 2 && j.priority !== 'HIGH').length;
+    precision = TP + FP > 0 ? TP / (TP + FP) : null;
+    recall = TP + FN > 0 ? TP / (TP + FN) : null;
+    accuracy = TP + TN + FP + FN > 0 ? (TP + TN) / (TP + TN + FP + FN) : null;
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -132,53 +206,60 @@ export default function Dashboard() {
   }
 
   const stats = [
-    { label: 'Jobs Today', value: todayJobs.length, icon: Briefcase, color: 'primary' as const },
-    { label: 'High Priority', value: highPriority, icon: AlertTriangle, color: 'high' as const },
-    { label: 'Applied', value: appliedCount, icon: Send, color: 'accent' as const },
-    { label: 'CVs Generated', value: cvsGenerated, icon: FileText, color: 'primary' as const },
+    { label: 'Total Jobs', value: jobs.length, icon: Briefcase, iconBg: 'bg-primary/10', iconColor: 'text-primary', border: 'border-b-primary' },
+    { label: 'High Priority', value: highPriority, icon: AlertTriangle, iconBg: 'bg-[hsl(var(--priority-high)/0.12)]', iconColor: 'text-[hsl(var(--priority-high))]', border: 'border-b-[hsl(var(--priority-high))]' },
+    { label: 'Applied', value: appliedCount, icon: Send, iconBg: 'bg-accent/10', iconColor: 'text-accent', border: 'border-b-accent' },
+    { label: 'CVs Generated', value: cvsGenerated, icon: FileText, iconBg: 'bg-primary/10', iconColor: 'text-primary', border: 'border-b-primary' },
   ];
-
-  const borderColorMap = {
-    primary: 'border-b-primary',
-    high: 'border-b-[hsl(var(--priority-high))]',
-    accent: 'border-b-accent',
-  };
-
-  const iconColorMap = {
-    primary: 'text-primary',
-    high: 'text-[hsl(var(--priority-high))]',
-    accent: 'text-accent',
-  };
 
   return (
     <div className="container py-6 md:py-8 space-y-6 md:space-y-8">
+
       {/* Hero */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 animate-fade-up" style={{ animationDelay: '0ms' }}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-up">
         <div className="flex items-center gap-4">
           {avatarUrl ? (
-            <img src={avatarUrl} alt="Profile" className="h-12 w-12 md:h-14 md:w-14 rounded-full object-cover border-2 border-[hsl(var(--glass-border)/0.4)] shrink-0" />
+            <img src={avatarUrl} alt="Profile"
+              className="h-12 w-12 md:h-14 md:w-14 rounded-full object-cover ring-2 ring-primary/20 ring-offset-2 ring-offset-background shrink-0" />
           ) : (
-            <div className="h-12 w-12 md:h-14 md:w-14 rounded-full bg-primary/10 flex items-center justify-center border-2 border-[hsl(var(--glass-border)/0.4)] shrink-0">
+            <div className="h-12 w-12 md:h-14 md:w-14 rounded-full bg-primary/10 flex items-center justify-center ring-2 ring-primary/20 ring-offset-2 ring-offset-background shrink-0">
               <User className="h-6 w-6 text-primary/50" />
             </div>
           )}
           <div>
-            <h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight" style={{ lineHeight: '1.1' }}>
+            <h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight leading-tight">
               {getGreeting()}, <span className="gradient-text">{userName || 'there'}</span> 👋
             </h1>
-            <p className="text-sm text-muted-foreground mt-1.5">
-              {format(new Date(), 'EEEE, MMMM d, yyyy')}
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
           </div>
         </div>
-        <button
-          onClick={handleScan}
-          disabled={scanning}
-          className={`btn-gradient flex items-center justify-center gap-2 text-base w-full sm:w-auto ${scanning ? '' : 'animate-pulse-glow'}`}
-        >
-          {scanning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Radar className="h-5 w-5" />}
-          {scanning ? 'Scanning...' : 'Find New Jobs'}
-        </button>
+        <div className="flex flex-col sm:items-end gap-2">
+          <button
+            onClick={handleScan}
+            disabled={scanning}
+            className={`btn-gradient flex items-center justify-center gap-2 text-sm w-full sm:w-auto ${scanning ? '' : 'animate-pulse-glow'}`}
+          >
+            {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
+            {scanning ? 'Scanning...' : 'Find New Jobs'}
+          </button>
+          {/* Last Scan inline below button */}
+          {lastScan && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {lastScan.success
+                ? <CheckCircle2 className="h-3 w-3 text-[hsl(var(--success))] shrink-0" />
+                : <XCircle className="h-3 w-3 text-destructive shrink-0" />}
+              <span>
+                Last scan {format(new Date(lastScan.started_at), 'MMM d') === format(new Date(), 'MMM d')
+                  ? `today at ${format(new Date(lastScan.started_at), 'HH:mm')}`
+                  : format(new Date(lastScan.started_at), 'MMM d')}
+              </span>
+              {lastScan.success && lastScan.jobs_added > 0 && (
+                <span className="text-[hsl(var(--success))] font-medium">· +{lastScan.jobs_added} new</span>
+              )}
+              {!lastScan.success && <span className="text-destructive">· failed</span>}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Stats */}
@@ -186,141 +267,118 @@ export default function Dashboard() {
         {stats.map((s, i) => (
           <div
             key={s.label}
-            className={`glass-card rounded-xl p-4 md:p-5 border-b-2 ${borderColorMap[s.color]} animate-fade-up`}
-            style={{ animationDelay: `${(i + 1) * 80}ms` }}
+            className={`glass-card rounded-xl p-4 md:p-5 border-b-2 ${s.border} animate-fade-up`}
+            style={{ animationDelay: `${(i + 1) * 70}ms` }}
           >
-            <div className="flex items-center justify-between mb-2 md:mb-3">
-              <span className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wider">{s.label}</span>
-              <s.icon className={`h-3.5 w-3.5 md:h-4 md:w-4 ${iconColorMap[s.color]} opacity-60`} />
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-3xl md:text-4xl font-display font-bold tabular-nums leading-none">{s.value}</p>
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mt-2 block">{s.label}</span>
+              </div>
+              <div className={`h-9 w-9 rounded-xl ${s.iconBg} flex items-center justify-center shrink-0`}>
+                <s.icon className={`h-4 w-4 ${s.iconColor}`} />
+              </div>
             </div>
-            <p className="text-2xl md:text-3xl font-display font-bold tabular-nums">{s.value}</p>
           </div>
         ))}
       </div>
 
-      {/* Last Scan Status */}
-      <div className="animate-fade-up" style={{ animationDelay: '320ms' }}>
-        {lastScan ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {lastScan.success ? (
-              <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))] shrink-0" />
-            ) : (
-              <XCircle className="h-4 w-4 text-destructive shrink-0" />
-            )}
-            <span>
-              Last scan: {format(new Date(lastScan.started_at), 'MMM d') === format(new Date(), 'MMM d')
-                ? `Today at ${format(new Date(lastScan.started_at), 'HH:mm')}`
-                : format(new Date(lastScan.started_at), 'MMM d \'at\' HH:mm')}
-            </span>
-            {lastScan.success && lastScan.jobs_added > 0 && (
-              <span className="text-[hsl(var(--success))] font-medium">+ {lastScan.jobs_added} new jobs</span>
-            )}
-            {lastScan.success && lastScan.jobs_added === 0 && (
-              <span className="text-muted-foreground">· no new jobs</span>
-            )}
-            {!lastScan.success && (
-              <span className="text-destructive font-medium">· failed</span>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">No scans yet. Run your first scan!</p>
-        )}
-      </div>
-
-      {/* Upcoming Deadlines */}
-      {(() => {
-        const upcoming = jobs
-          .filter(j => j.deadline && new Date(j.deadline) >= new Date() && j.status !== 'Rejected')
-          .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())
-          .slice(0, 5);
-        if (upcoming.length === 0) return null;
-        return (
-          <div className="animate-fade-up" style={{ animationDelay: '360ms' }}>
-            <h2 className="text-lg font-display font-semibold mb-3 flex items-center gap-2">
-              <CalendarClock className="h-5 w-5 text-[hsl(var(--warning))]" />
-              Upcoming Deadlines
-            </h2>
-            <div className="glass-card rounded-xl divide-y divide-[hsl(var(--glass-border)/0.2)]">
-              {upcoming.map(job => {
-                const daysLeft = Math.ceil((new Date(job.deadline!).getTime() - Date.now()) / 86400000);
-                const urgent = daysLeft <= 2;
-                return (
-                  <div
-                    key={job.id}
-                    onClick={() => setSelectedJob(job)}
-                    className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-[hsl(var(--primary)/0.04)] transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <CompanyLogo name={job.company} domain={job.company_domain} jobLink={job.job_link} size="sm" />
-                      <div className="min-w-0">
-                        <p className="font-medium text-sm truncate">{job.role}</p>
-                        <p className="text-xs text-muted-foreground truncate">{job.company}</p>
-                      </div>
-                    </div>
-                    <span className={`text-xs font-semibold tabular-nums shrink-0 ml-3 ${urgent ? 'text-destructive' : 'text-[hsl(var(--warning))]'}`}>
-                      {daysLeft === 0 ? 'Today' : daysLeft === 1 ? 'Tomorrow' : `${daysLeft} days`}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Best Matches */}
       {topJobs.length > 0 && (
-        <div className="animate-fade-up" style={{ animationDelay: '400ms' }}>
-          <h2 className="text-lg font-display font-semibold mb-4">Best Matches Today</h2>
-          <div className="flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-2 px-2 snap-x snap-mandatory">
-            {topJobs.map((job) => (
-              <div
-                key={job.id}
-                onClick={() => setSelectedJob(job)}
-                className="glass-card glass-hover rounded-xl p-4 min-w-[200px] md:min-w-[220px] max-w-[260px] snap-start cursor-pointer flex flex-col gap-3"
-              >
-                <div className="flex items-center gap-3">
-                  <CompanyLogo name={job.company} domain={(job as any).company_domain} jobLink={job.job_link} />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-sm truncate" dir="auto">{job.company}</p>
-                    <p className="text-xs text-muted-foreground truncate" dir="auto">{job.role}</p>
+        <div className="animate-fade-up" style={{ animationDelay: '350ms' }}>
+          <h2 className="text-base font-display font-semibold mb-3 text-muted-foreground uppercase tracking-wider text-xs">Best Matches</h2>
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 snap-x snap-mandatory">
+            {topJobs.map((job) => {
+              const scoreColor = job.score >= 8 ? 'hsl(155 100% 49%)' : job.score >= 6 ? 'hsl(38 92% 50%)' : 'hsl(0 72% 51%)';
+              return (
+                <div
+                  key={job.id}
+                  onClick={() => setSelectedJob(job)}
+                  className="glass-card glass-hover rounded-xl p-4 min-w-[210px] max-w-[240px] snap-start cursor-pointer flex flex-col gap-3 shrink-0"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <CompanyLogo name={job.company} domain={(job as any).company_domain} jobLink={job.job_link} />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm truncate leading-tight" dir="auto">{job.company}</p>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5" dir="auto">{job.role}</p>
+                    </div>
                   </div>
+                  {/* Score bar */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <ScoreBadge score={job.score} />
+                      <Badge className={`${priorityClass[job.priority]} text-xs`}>{job.priority}</Badge>
+                    </div>
+                    <div className="h-1 rounded-full bg-[hsl(var(--glass-border)/0.3)]">
+                      <div className="h-1 rounded-full transition-all duration-700"
+                        style={{ width: `${job.score * 10}%`, backgroundColor: scoreColor }} />
+                    </div>
+                  </div>
+                  {job.location && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      <span className="truncate" dir="auto">{job.location}</span>
+                    </div>
+                  )}
+                  <button className="flex items-center justify-center gap-1.5 text-xs font-medium text-accent hover:text-accent/80 transition-colors mt-auto group">
+                    View details
+                    <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                  </button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <ScoreBadge score={job.score} />
-                  <Badge className={`${priorityClass[job.priority]} text-xs`}>{job.priority}</Badge>
-                </div>
-                <button className="flex items-center justify-center gap-1.5 text-xs font-medium text-accent hover:text-accent/80 transition-colors mt-auto group">
-                  View details
-                  <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
       {/* Analytics */}
       {jobs.length > 0 && (
-        <div className="animate-fade-up" style={{ animationDelay: '480ms' }}>
-          <h2 className="text-lg font-display font-semibold mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-accent" />
+        <div className="animate-fade-up space-y-4" style={{ animationDelay: '450ms' }}>
+          <h2 className="text-base font-display font-semibold text-muted-foreground uppercase tracking-wider text-xs flex items-center gap-2">
+            <BarChart3 className="h-3.5 w-3.5" />
             Analytics
           </h2>
+
+          {/* ML Metrics */}
+          {hasMetrics && (
+            <div className="glass-card rounded-xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-sm">AI Scoring Quality</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    How well the AI predicts your preferences · based on {rated.length} rated jobs
+                  </p>
+                </div>
+                <div className="text-right text-xs text-muted-foreground">
+                  <p>★★★★+ = liked &nbsp;|&nbsp; ★★ or less = disliked</p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <MetricArc value={precision} label="Precision" description={`${TP}/(${TP}+${FP}) — HIGH jobs you liked`} />
+                <MetricArc value={recall} label="Recall" description={`${TP}/(${TP}+${FN}) — liked jobs marked HIGH`} />
+                <MetricArc value={accuracy} label="Accuracy" description={`${TP+TN}/${TP+TN+FP+FN} — correct overall`} />
+              </div>
+            </div>
+          )}
+
+          {/* Score Distribution + Priority Breakdown */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Score Distribution */}
             <div className="glass-card rounded-xl p-4 md:p-5">
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">Score Distribution</h3>
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={scoreDistribution} barSize={20}>
+              <h3 className="text-sm font-semibold mb-1">Score Distribution</h3>
+              <p className="text-xs text-muted-foreground mb-4">How jobs are spread across fit scores</p>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={scoreDistribution} barSize={22} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                   <XAxis dataKey="score" tick={{ fontSize: 11, fill: 'hsl(225 12% 50%)' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: 'hsl(225 12% 50%)' }} axisLine={false} tickLine={false} allowDecimals={false} />
                   <Tooltip
+                    cursor={{ fill: 'hsl(232 18% 22% / 0.5)', radius: 4 }}
                     contentStyle={{ backgroundColor: 'hsl(232 22% 13%)', border: '1px solid hsl(232 18% 22%)', borderRadius: '8px', fontSize: '12px' }}
                     labelStyle={{ color: 'hsl(220 15% 93%)' }}
                     itemStyle={{ color: 'hsl(220 15% 93%)' }}
+                    formatter={(v: any) => [`${v} jobs`, 'Count']}
+                    labelFormatter={(l) => `Score ${l}`}
                   />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  <Bar dataKey="count" radius={[6, 6, 0, 0]}>
                     {scoreDistribution.map((entry, idx) => (
                       <Cell key={idx} fill={entry.fill} />
                     ))}
@@ -331,35 +389,77 @@ export default function Dashboard() {
 
             {/* Priority Breakdown */}
             <div className="glass-card rounded-xl p-4 md:p-5">
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">Priority Breakdown</h3>
-              <div className="flex items-center gap-4">
-                <ResponsiveContainer width={120} height={120}>
-                  <PieChart>
-                    <Pie
-                      data={priorityBreakdown}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={30}
-                      outerRadius={50}
-                      dataKey="value"
-                      strokeWidth={0}
-                    >
-                      {priorityBreakdown.map((entry, idx) => (
-                        <Cell key={idx} fill={entry.color} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex flex-col gap-2">
+              <h3 className="text-sm font-semibold mb-1">Priority Breakdown</h3>
+              <p className="text-xs text-muted-foreground mb-4">{totalPriority} jobs classified</p>
+              <div className="flex items-center gap-6">
+                <div className="relative shrink-0">
+                  <ResponsiveContainer width={140} height={140}>
+                    <PieChart>
+                      <Pie
+                        data={priorityBreakdown}
+                        cx="50%" cy="50%"
+                        innerRadius={38} outerRadius={60}
+                        dataKey="value" strokeWidth={0} paddingAngle={2}
+                      >
+                        {priorityBreakdown.map((entry, idx) => (
+                          <Cell key={idx} fill={entry.color} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-2xl font-display font-bold tabular-nums">{totalPriority}</span>
+                    <span className="text-[10px] text-muted-foreground">total</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2.5 flex-1">
                   {priorityBreakdown.map(p => (
-                    <div key={p.name} className="flex items-center gap-2 text-xs">
-                      <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: p.color }} />
-                      <span className="text-muted-foreground">{p.name}</span>
-                      <span className="font-bold tabular-nums ml-auto">{p.value}</span>
+                    <div key={p.name} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+                          <span className="text-muted-foreground">{p.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold tabular-nums">{p.value}</span>
+                          <span className="text-muted-foreground/60">{Math.round(p.value / totalPriority * 100)}%</span>
+                        </div>
+                      </div>
+                      <div className="h-1 rounded-full bg-[hsl(var(--glass-border)/0.3)]">
+                        <div className="h-1 rounded-full transition-all duration-700"
+                          style={{ width: `${p.value / totalPriority * 100}%`, backgroundColor: p.color }} />
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Application Pipeline */}
+          <div className="glass-card rounded-xl p-4 md:p-5">
+            <h3 className="text-sm font-semibold mb-1">Application Pipeline</h3>
+            <p className="text-xs text-muted-foreground mb-4">Your job search funnel</p>
+            <div className="space-y-3">
+              {pipeline.map(s => (
+                <div key={s.label} className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-20 shrink-0">{s.label}</span>
+                  <div className="flex-1 h-2 rounded-full bg-[hsl(var(--glass-border)/0.3)]">
+                    <div
+                      className="h-2 rounded-full transition-all duration-700"
+                      style={{
+                        width: `${Math.max((s.count / maxPipelineCount) * 100, s.count > 0 ? 4 : 0)}%`,
+                        backgroundColor: s.color,
+                        opacity: s.count > 0 ? 1 : 0.3,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs font-bold tabular-nums w-6 text-right"
+                    style={{ color: s.count > 0 ? s.color : 'hsl(225 12% 35%)' }}>
+                    {s.count}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

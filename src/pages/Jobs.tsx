@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Loader2, FileText, Download } from 'lucide-react';
+import { Loader2, FileText, Download, Clock } from 'lucide-react';
 import JobDetailPanel from '@/components/JobDetailPanel';
 import CompanyLogo from '@/components/CompanyLogo';
 
@@ -145,12 +145,13 @@ export default function Jobs() {
               <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
               <TableHead className="hidden md:table-cell text-xs uppercase tracking-wider text-muted-foreground">Found</TableHead>
               <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">CV</TableHead>
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Fit</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
                   No jobs found matching filters
                 </TableCell>
               </TableRow>
@@ -184,11 +185,28 @@ export default function Jobs() {
                     <Badge variant="outline" className="text-xs border-[hsl(var(--glass-border)/0.5)]">{job.status}</Badge>
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-xs text-muted-foreground whitespace-nowrap">
-                    {job.alert_date ? formatDistanceToNow(new Date(job.alert_date), { addSuffix: true }) : '—'}
+                    <div className="flex items-center gap-1">
+                      {/* Feature 7: stale indicator — New job untouched for 7+ days */}
+                      {job.status === 'New' && job.alert_date && (Date.now() - new Date(job.alert_date).getTime()) > 7 * 24 * 60 * 60 * 1000 && (
+                        <Clock className="h-3 w-3 text-orange-400 shrink-0" title="Untouched for 7+ days" />
+                      )}
+                      {job.alert_date ? formatDistanceToNow(new Date(job.alert_date), { addSuffix: true }) : '—'}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {job.tailored_cv ? (
                       <FileText className="h-4 w-4 text-primary" />
+                    ) : (
+                      <span className="text-muted-foreground/40 text-xs">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {job.user_score ? (
+                      <span className="text-xs tabular-nums">
+                        {[1,2,3,4,5].map(s => (
+                          <span key={s} className={s <= job.user_score! ? 'text-yellow-400' : 'text-muted-foreground/20'}>★</span>
+                        ))}
+                      </span>
                     ) : (
                       <span className="text-muted-foreground/40 text-xs">—</span>
                     )}

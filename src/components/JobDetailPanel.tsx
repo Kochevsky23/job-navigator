@@ -1,7 +1,7 @@
 import { Job } from '@/types/database';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, FileText, Loader2, Download, CheckCircle2, Send, StickyNote, CalendarClock, Save } from 'lucide-react';
+import { ExternalLink, FileText, Loader2, Download, CheckCircle2, Send, StickyNote, Save } from 'lucide-react';
 import { useState } from 'react';
 import { generateCV } from '@/lib/api';
 import { db } from '@/lib/supabase-external';
@@ -55,14 +55,13 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
   const [generating, setGenerating] = useState(false);
   const [marking, setMarking] = useState(false);
   const [notes, setNotes] = useState('');
-  const [deadline, setDeadline] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [userScore, setUserScore] = useState<number | null>(null);
 
   // Sync local state when job changes
   useState(() => {
     if (job) {
       setNotes(job.notes || '');
-      setDeadline(job.deadline ? new Date(job.deadline).toISOString().slice(0, 10) : '');
     }
   });
 
@@ -71,17 +70,28 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
   if (job && job.id !== prevJobId) {
     setPrevJobId(job.id);
     setNotes(job.notes || '');
-    setDeadline(job.deadline ? new Date(job.deadline).toISOString().slice(0, 10) : '');
+    setUserScore(job.user_score ?? null);
   }
 
   if (!job) return null;
+
+  const handleRateJob = async (rating: number) => {
+    const newScore = userScore === rating ? null : rating; // toggle off if same
+    setUserScore(newScore);
+    try {
+      await db.from('jobs').update({ user_score: newScore }).eq('id', job!.id);
+      onUpdate?.();
+    } catch (e: any) {
+      toast.error('Failed to save rating');
+      setUserScore(job!.user_score ?? null);
+    }
+  };
 
   const handleSaveNotes = async () => {
     setSavingNotes(true);
     try {
       const { error } = await db.from('jobs').update({
         notes: notes || null,
-        deadline: deadline ? new Date(deadline).toISOString() : null,
       }).eq('id', job.id);
       if (error) throw error;
       toast.success('Notes saved!');
@@ -141,14 +151,37 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
 
           <div className="flex items-center gap-4">
             <CircularScore score={job.score} />
-            <div className="flex flex-wrap gap-2">
-              <Badge className={priorityClass[job.priority]}>{job.priority}</Badge>
-              <Badge variant="outline" className="border-[hsl(var(--glass-border)/0.5)]">{job.status}</Badge>
-              {job.applied_at && (
-                <Badge variant="outline" className="border-[hsl(var(--success)/0.3)] text-[hsl(var(--success))] text-xs">
-                  Applied {new Date(job.applied_at).toLocaleDateString()}
-                </Badge>
-              )}
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Badge className={priorityClass[job.priority]}>{job.priority}</Badge>
+                <Badge variant="outline" className="border-[hsl(var(--glass-border)/0.5)]">{job.status}</Badge>
+                {job.applied_at && (
+                  <Badge variant="outline" className="border-[hsl(var(--success)/0.3)] text-[hsl(var(--success))] text-xs">
+                    Applied {new Date(job.applied_at).toLocaleDateString()}
+                  </Badge>
+                )}
+              </div>
+              {/* Feature 6: User rating — trains future scoring */}
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground mr-1">Your fit:</span>
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    onClick={() => handleRateJob(star)}
+                    className={`text-lg leading-none transition-colors ${
+                      userScore !== null && star <= userScore
+                        ? 'text-yellow-400'
+                        : 'text-muted-foreground/30 hover:text-yellow-400/60'
+                    }`}
+                    title={`Rate ${star}/5`}
+                  >
+                    ★
+                  </button>
+                ))}
+                {userScore !== null && (
+                  <span className="text-xs text-muted-foreground ml-1">{userScore}/5</span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -193,18 +226,6 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
               Interview Prep & Notes
             </div>
             <div className="glass-card rounded-xl p-3 space-y-3">
-              <div>
-                <label className="text-xs text-muted-foreground uppercase tracking-wider block mb-1.5">
-                  <CalendarClock className="h-3 w-3 inline mr-1" />
-                  Application Deadline
-                </label>
-                <input
-                  type="date"
-                  value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
-                  className="w-full rounded-lg border border-[hsl(var(--glass-border)/0.4)] bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
               <div>
                 <label className="text-xs text-muted-foreground uppercase tracking-wider block mb-1.5">Notes</label>
                 <textarea
