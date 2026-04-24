@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   const isAuthorized =
-    (scheduledSecret && scheduledSecret === expectedSecret) ||
+    (scheduledSecret && expectedSecret && scheduledSecret === expectedSecret) ||
     authHeader.replace("Bearer ", "") === serviceRoleKey;
 
   if (!isAuthorized) {
@@ -32,58 +32,61 @@ Deno.serve(async (req) => {
     serviceRoleKey
   );
 
-  // Get all users with Gmail connected and scheduled scan enabled (or all users if none have the setting yet)
+  // Get all users with Gmail connected
   const { data: profiles, error } = await supabase
     .from("user_profiles")
     .select("id")
     .not("google_refresh_token", "is", null);
 
   if (error || !profiles || profiles.length === 0) {
-    console.log("No users with Gmail connected, or error:", error?.message);
-    return new Response(JSON.stringify({ scanned: 0 }), {
+    console.log("No users with Gmail connected:", error?.message);
+    return new Response(JSON.stringify({ triggered: 0 }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  console.log(`Running scheduled scan for ${profiles.length} user(s)`);
+  console.log(`Triggering scheduled scan for ${profiles.length} user(s)`);
 
-  const results: { userId: string; success: boolean; error?: string }[] = [];
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 
-  for (const profile of profiles) {
-    try {
-      // Get user email from auth
-      const { data: authUser } = await supabase.auth.admin.getUserById(profile.id);
-      const userEmail = authUser?.user?.email;
+  // Build scan tasks — run in background so we can respond immediately
+  const scanTask = (async () => {
+    for (const profile of profiles) {
+      try {
+        const { data: authUser } = await supabase.auth.admin.getUserById(profile.id);
+        const userEmail = authUser?.user?.email;
 
-      // Call daily-scan with service role key + userId
-      const scanResp = await fetch(
-        `${Deno.env.get("SUPABASE_URL")}/functions/v1/daily-scan`,
-        {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/daily-scan`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${serviceRoleKey}`,
           },
           body: JSON.stringify({ userId: profile.id, userEmail }),
-        }
-      );
+        });
 
-      if (scanResp.ok) {
-        const scanData = await scanResp.json();
-        console.log(`User ${profile.id}: found=${scanData.jobs_found}, added=${scanData.jobs_added}`);
-        results.push({ userId: profile.id, success: true });
-      } else {
-        const errData = await scanResp.json().catch(() => ({}));
-        console.error(`User ${profile.id} scan failed:`, errData.error);
-        results.push({ userId: profile.id, success: false, error: errData.error });
+        const result = await resp.json().catch(() => ({}));
+        if (resp.ok) {
+          console.log(`User ${profile.id}: found=${result.jobs_found}, added=${result.jobs_added}`);
+        } else {
+          console.error(`User ${profile.id} failed:`, result.error);
+        }
+      } catch (e: any) {
+        console.error(`User ${profile.id} exception:`, e.message);
       }
-    } catch (e: any) {
-      console.error(`User ${profile.id} exception:`, e.message);
-      results.push({ userId: profile.id, success: false, error: e.message });
     }
+  })();
+
+  // Register as background work so it completes after response is sent
+  // @ts-ignore — EdgeRuntime is available in Supabase edge runtime
+  if (typeof EdgeRuntime !== "undefined") {
+    // @ts-ignore
+    EdgeRuntime.waitUntil(scanTask);
   }
 
-  return new Response(JSON.stringify({ scanned: profiles.length, results }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  // Return immediately — scans run in background
+  return new Response(
+    JSON.stringify({ triggered: profiles.length, message: "Scans started in background" }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
 });

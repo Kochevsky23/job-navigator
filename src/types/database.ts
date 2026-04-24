@@ -20,7 +20,6 @@ export interface Job {
   applied_at: string | null;
   company_domain: string | null;
   notes: string | null;
-  deadline: string | null;
   user_score: number | null;
 }
 

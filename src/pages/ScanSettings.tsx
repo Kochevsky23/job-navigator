@@ -126,12 +126,12 @@ export default function ScanSettings() {
       if (error) throw error;
       toast.success('Profile updated!');
 
-      // Feature 2: Auto-rescore all jobs when CV changes
+      // Auto-rescore all jobs when CV changes
       if (cvChanged && cvText) {
         toast.info('CV changed — re-scoring your jobs in background...');
-        supabase.functions.invoke('rescore-jobs').then(({ data, error: rescoreErr }) => {
+        supabase.functions.invoke('reanalyze-jobs', { body: { forceAll: true } }).then(({ data, error: rescoreErr }) => {
           if (rescoreErr) return;
-          if (data?.updated > 0) toast.success(`Re-scored ${data.updated} jobs with new CV.`);
+          if (data?.updated > 0) toast.success(`Re-scored ${data.updated} jobs with your new CV.`);
         });
       }
     } catch (e: any) {
@@ -277,7 +277,12 @@ export default function ScanSettings() {
       toast.success(`Scan complete! Found ${result.jobs_found} jobs, added ${result.jobs_added} new.`);
       fetchScans();
     } catch (e: any) {
-      toast.error(e.message || 'Scan failed');
+      if (e.message === 'GMAIL_RECONNECT_REQUIRED') {
+        toast.error('Gmail connection expired — please reconnect.', { duration: 8000 });
+        handleConnectGmail();
+      } else {
+        toast.error(e.message || 'Scan failed');
+      }
     } finally {
       setScanning(false);
     }

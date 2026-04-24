@@ -121,7 +121,6 @@ interface JobFromClaude {
   company_domain: string;
   reason: string;
   status: string;
-  deadline: string; // ISO date string or empty
 }
 
 // Feature 8: Try to fetch LinkedIn job description for richer scoring
@@ -194,64 +193,78 @@ async function sendEmailDigest(userEmail: string, addedJobs: JobFromClaude[]): P
   }
 }
 
-async function analyzeWithClaude(emails: string[], cvText: string, userRatings: { company: string; role: string; score: number; user_score: number }[]): Promise<JobFromClaude[]> {
-  // Use more CV text for better matching, and more per-email for digest emails
+function buildRatingsSection(allRated: { company: string; role: string; score: number; user_score: number; priority: string }[]): string {
+  if (allRated.length === 0) return "";
+  // Sort by biggest mismatch for most informative examples
+  const sorted = [...allRated].sort((a, b) => {
+    const mismatchA = Math.abs(a.score / 10 - a.user_score / 5);
+    const mismatchB = Math.abs(b.score / 10 - b.user_score / 5);
+    return mismatchB - mismatchA;
+  });
+  const top40 = sorted.slice(0, 40);
+  const aiOverscored = allRated.filter(r => r.score >= 7 && r.user_score <= 2);
+  const aiUnderscored = allRated.filter(r => r.score <= 4 && r.user_score >= 4);
+  const goodMatches = allRated.filter(r => r.user_score >= 4 && r.score >= 7);
+
+  const patternLines: string[] = [];
+  if (aiOverscored.length > 0) patternLines.push(`AI OVERSCORED (AI HIGH but user disliked): ${aiOverscored.map(r => `${r.company}/${r.role}`).join(", ")}`);
+  if (aiUnderscored.length > 0) patternLines.push(`AI UNDERSCORED (AI LOW but user liked): ${aiUnderscored.map(r => `${r.company}/${r.role}`).join(", ")}`);
+  if (goodMatches.length > 0) patternLines.push(`CONFIRMED GOOD MATCHES: ${goodMatches.map(r => `${r.company}/${r.role}`).join(", ")}`);
+
+  return `
+===== USER RATING CALIBRATION =====
+The user has rated ${allRated.length} past jobs (1=poor fit, 5=perfect fit). Sorted by biggest AI vs user mismatch first:
+${top40.map(r => `- ${r.company} / ${r.role} → AI: ${r.score}/10, User: ${r.user_score}/5 (${r.user_score >= 4 ? "liked" : r.user_score <= 2 ? "disliked" : "neutral"})`).join("\n")}
+
+PATTERNS TO APPLY TO NEW JOBS:
+${patternLines.length > 0 ? patternLines.join("\n") : "No strong patterns yet."}
+Adjust scoring for new jobs that resemble overscored types (score lower) or underscored types (score higher).
+===== END CALIBRATION =====
+`;
+}
+
+async function analyzeWithClaude(emails: string[], cvText: string, ratingsSection: string): Promise<JobFromClaude[]> {
   const truncatedCV = cvText.length > 10000 ? cvText.substring(0, 10000) + "\n[CV TRUNCATED]" : cvText;
   const truncatedEmails = emails.map(e => e.length > 10000 ? e.substring(0, 10000) + "\n[EMAIL TRUNCATED]" : e);
   const emailContent = truncatedEmails.join("\n\n---\n\n");
 
-  const ratingsSection = userRatings.length > 0 ? `
-===== USER RATING CALIBRATION =====
-The user has rated these past jobs (1=terrible, 5=perfect fit). Use these to calibrate your scoring:
-${userRatings.map(r => `- ${r.company} / ${r.role} → AI score: ${r.score}/10, User rating: ${r.user_score}/5`).join("\n")}
-If the user consistently rates certain job types higher or lower than your AI score, adjust your scoring for similar jobs accordingly.
-===== END CALIBRATION =====
-` : "";
-
-  const prompt = `You are an expert job-fit analyst. Your task is to extract EVERY job listing from the emails and score each one carefully against the candidate's CV.
+  const prompt = `You are an expert job-fit analyst. Extract EVERY job listing from the emails and score each against the candidate's CV.
 
 ${ratingsSection}
 ===== CANDIDATE CV =====
 ${truncatedCV}
 ===== END CV =====
 
-STEP 1 — Read the CV thoroughly and note:
-- Candidate's city (for location scoring)
-- Years of experience and current student status
-- Every technical skill, tool, and language explicitly mentioned
-- Education field and degree level
-- Industry domains they have worked in
+STEP 1 — Read the CV and note: candidate's city, experience level, every explicit skill/tool, education, domains.
 
-STEP 2 — Extract EVERY job listing from the emails below.
-IMPORTANT: Many emails are digest-style and contain MULTIPLE job listings. You MUST extract every single job you find — do not stop at 30. Extract up to 60 jobs total.
-Each job listing usually has: company name, job title, location, and a link.
+STEP 2 — Extract EVERY job from the emails. Many emails are digests with MULTIPLE listings. Extract up to 60 total.
+IMPORTANT: If a job title is in Hebrew or another language, translate it to English for the "role" field.
 
-STEP 3 — Score each job on 4 factors (max 10 total):
+STEP 3 — Score each job (max 10 total):
 
 FACTOR 1 — CV SKILLS MATCH (0-4 pts)
-Read the job's stated requirements carefully. Compare each requirement against what is explicitly in the CV.
-- 4 pts: 80%+ of stated requirements are directly covered by the CV (exact skills, tools, experience)
-- 3 pts: 60-80% of requirements covered
+- 4 pts: 80%+ of requirements in CV
+- 3 pts: 60-80% covered
 - 2 pts: 40-60% covered
 - 1 pt: 20-40% covered
-- 0 pts: less than 20% covered
-Be specific — only count skills that are actually in the CV, not assumed.
+- 0 pts: <20% covered
+Only count skills explicitly in the CV.
 
-FACTOR 2 — EXPERIENCE LEVEL FIT (0-3 pts)
-- 3 pts: explicitly says "student", "internship", "entry level", "0-1 years", "fresh graduate", "50%", "משרת סטודנט", "התמחות"
-- 2 pts: "junior", "1-2 years", or no experience requirement stated
-- 1 pt: "2-3 years experience"
-- 0 pts: "3+ years", or title contains Senior/Lead/Principal/Manager/Director/Head/VP/Staff/Architect → force REJECTED
+FACTOR 2 — EXPERIENCE LEVEL (0-3 pts)
+- 3 pts: "student", "internship", "entry level", "0-1 years", "fresh graduate", "50%", "משרת סטודנט", "התמחות"
+- 2 pts: "junior", "1-2 years", or no experience stated
+- 1 pt: "2-3 years"
+- 0 pts: "3+ years" OR title has Senior/Lead/Principal/Manager/Director/Head/VP/Staff/Architect → force REJECTED
 
 FACTOR 3 — LOCATION (0-2 pts)
-Use the candidate's city from the CV.
-- 2 pts: same city as candidate OR within 10km
-- 1 pt: commutable distance (~40km, e.g. Tel Aviv metro area from Kfar Saba)
-- 0 pts: far away (Haifa, Jerusalem, Be'er Sheva, south) OR remote → remote = force REJECTED
+- 2 pts: same city as candidate or within 10km
+- 1 pt: commutable ~40km (Tel Aviv metro from Kfar Saba)
+- 0 pts: Haifa, Jerusalem, Beer Sheva, south of Tel Aviv, Eilat → these locations also CAP score at 6 (cannot be HIGH)
+- remote → force REJECTED
 
 FACTOR 4 — FIELD RELEVANCE (0-1 pt)
-- 1 pt: data analysis, BI, business intelligence, analytics, business analysis, operations, industrial engineering, supply chain, logistics, product, finance analytics, data science, reporting
-- 0 pts: unrelated (pure sales, HR, marketing only, civil/mechanical engineering, law, etc.)
+- 1 pt: data analysis, BI, analytics, business analysis, operations, industrial engineering, supply chain, logistics, product, finance analytics, data science, reporting
+- 0 pts: unrelated (pure sales, HR, marketing only, law, civil/mechanical engineering)
 
 PRIORITY:
 - HIGH: 8-10
@@ -259,22 +272,19 @@ PRIORITY:
 - LOW: 3-4
 - REJECTED: 1-2, OR senior/manager title, OR remote, OR 3+ years required
 
-REASON (mandatory, 3-4 sentences):
-Sentence 1: List the specific skills/experience from the CV that match this job's requirements (be specific with tool/skill names).
-Sentence 2: State what requirements from the job are missing or only partially covered in the CV.
-Sentence 3: Assess the experience level fit and location.
-Sentence 4: Overall verdict — why this is or isn't a good fit.
-Example: "Your SQL data pipeline work at Noogata and KPI dashboard experience directly match the data analysis requirements. Python and Excel are listed in both CV and job, though the job also requires Tableau which is not in your CV. Entry-level position fits your student status, and Tel Aviv is commutable from Kfar Saba. Strong overall match — the missing Tableau skill is learnable and should not be a blocker."
-Do NOT write vague reasons. Be specific to THIS candidate's CV and THIS job's requirements.
+REASON — EXACTLY 4 sentences, no more, no less:
+S1: Which specific skills/tools from the CV match this job's requirements (name them).
+S2: What is missing or only partially covered from the job requirements.
+S3: Experience level fit and location assessment (one sentence).
+S4: Overall verdict in one sentence.
+STRICT FORMAT: "Your [skill1] and [skill2] from [experience] match the [requirement]. The job requires [missing skills] which are not in your CV. [Level] fits your [student/junior] status and [city] is [commute assessment]. [Verdict]."
+Do NOT write paragraphs. Do NOT exceed 4 sentences. Be specific.
 
 LINK EXTRACTION:
-- job_link: direct company careers URL only. Empty string if none found.
-- linkedin_id: numeric ID from LinkedIn URL only (e.g. "4385024025"). Empty string if none.
-- NEVER put a linkedin.com URL in job_link.
+- job_link: direct company careers URL only. Empty if none. NEVER put linkedin.com in job_link.
+- linkedin_id: numeric ID from LinkedIn URL only (e.g. "4385024025"). Empty if none.
 
-COMPANY DOMAIN: the company's main website domain. Use your knowledge of the company.
-
-DEADLINE: If the email explicitly mentions an application deadline date, extract it as YYYY-MM-DD. Otherwise empty string.
+COMPANY DOMAIN: main website domain using your knowledge of the company.
 
 ===== JOB ALERT EMAILS =====
 ${emailContent}
@@ -283,7 +293,7 @@ ${emailContent}
 Return ONLY valid JSON. ASCII characters only (no Hebrew, no special quotes, no newlines inside strings):
 {
   "jobs": [{
-    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "company_domain": "", "reason": "", "status": "New", "deadline": ""
+    "company": "", "role": "", "location": "", "score": 0, "priority": "", "exp_required": "", "job_link": "", "linkedin_id": "", "company_domain": "", "reason": "", "status": "New"
   }]
 }`;
 
@@ -534,16 +544,22 @@ Deno.serve(async (req) => {
       console.log(`Step 3: CV from Drive: ${cvText.length} chars`);
     }
 
-    // 3b. Feature 6: Fetch user's past ratings for calibration
+    // 3b. Feature 6: Fetch user's past ratings for calibration — get all rated jobs, sorted by biggest mismatch first
     const { data: ratedJobsData } = await supabase
       .from("jobs")
-      .select("company, role, score, user_score")
+      .select("company, role, score, user_score, priority")
       .eq("user_id", userId)
       .not("user_score", "is", null)
-      .order("user_score", { ascending: false })
-      .limit(20);
-    const userRatings = (ratedJobsData || []) as { company: string; role: string; score: number; user_score: number }[];
-    console.log(`Step 3b: ${userRatings.length} rated jobs for calibration`);
+      .limit(60);
+    // Sort by biggest mismatch (normalized AI score vs user rating) to give Claude the most informative examples
+    const allRated = ((ratedJobsData || []) as { company: string; role: string; score: number; user_score: number; priority: string }[])
+      .sort((a, b) => {
+        const mismatchA = Math.abs(a.score / 10 - a.user_score / 5);
+        const mismatchB = Math.abs(b.score / 10 - b.user_score / 5);
+        return mismatchB - mismatchA;
+      });
+    const ratingsSection = buildRatingsSection(allRated);
+    console.log(`Step 3b: ${allRated.length} rated jobs for calibration`);
 
     // 3c. Feature 8: Try to enrich emails with LinkedIn descriptions for jobs that have linkedin_id
     // (best-effort, no failure if it doesn't work)
@@ -560,7 +576,7 @@ Deno.serve(async (req) => {
 
     // 4. Analyze with Claude
     console.log("Step 4: Calling Claude...");
-    const jobs = await analyzeWithClaude(emailsWithLinkedIn, cvText, userRatings);
+    const jobs = await analyzeWithClaude(emailsWithLinkedIn, cvText, ratingsSection);
     console.log(`Step 4: Claude returned ${jobs.length} jobs`);
     jobsFound = jobs.length;
 
@@ -569,6 +585,8 @@ Deno.serve(async (req) => {
     const HIGH_EXP = /\b(3\+|4\+|5\+|6\+|7\+|8\+|3-5|5-7|3 years|4 years|5 years)\b/i;
     const RELEVANT_FIELDS = /\b(data|analy|operations|business|project.?manag|supply.?chain|logistics|industrial.?engineer|BI|reporting|excel|sql|python|planning|procurement|product)\b/i;
     const REMOTE_JOB = /\b(remote|עבודה מרחוק|work from home|WFH)\b/i;
+    // Far locations: not commutable from Kfar Saba → cap score at MEDIUM max
+    const FAR_LOCATION = /\b(haifa|jerusalem|be.?er sheva|beer sheva|eilat|nazareth|nazeret|migdal haemek|karmiel|חיפה|ירושלים|באר שבע|אילת)\b/i;
 
     for (const job of jobs) {
       const title = (job.role || '').trim();
@@ -599,6 +617,12 @@ Deno.serve(async (req) => {
         if (!job.reason.includes("remote")) {
           job.reason = `${job.reason} [Remote job — auto-rejected per policy.]`;
         }
+      }
+
+      // Hard rule: far locations (Haifa, Jerusalem, Beer Sheva) → cap at MEDIUM (score ≤ 6)
+      if (FAR_LOCATION.test(location) && job.priority !== "REJECTED") {
+        job.score = Math.min(job.score, 6);
+        if (job.priority === "HIGH") job.priority = "MEDIUM";
       }
 
       // Hard rule: unrelated field → max score 4, LOW
@@ -689,8 +713,6 @@ Deno.serve(async (req) => {
         status: job.status || "New",
         fingerprint,
         alert_date: new Date().toISOString(),
-        // Feature 3: deadline extracted from email by Claude
-        deadline: job.deadline && /^\d{4}-\d{2}-\d{2}$/.test(job.deadline) ? new Date(job.deadline).toISOString() : null,
       });
 
       if (insertError) {

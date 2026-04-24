@@ -145,12 +145,13 @@ export default function Jobs() {
               <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
               <TableHead className="hidden md:table-cell text-xs uppercase tracking-wider text-muted-foreground">Found</TableHead>
               <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">CV</TableHead>
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Fit</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
                   No jobs found matching filters
                 </TableCell>
               </TableRow>
@@ -195,6 +196,17 @@ export default function Jobs() {
                   <TableCell>
                     {job.tailored_cv ? (
                       <FileText className="h-4 w-4 text-primary" />
+                    ) : (
+                      <span className="text-muted-foreground/40 text-xs">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {job.user_score ? (
+                      <span className="text-xs tabular-nums">
+                        {[1,2,3,4,5].map(s => (
+                          <span key={s} className={s <= job.user_score! ? 'text-yellow-400' : 'text-muted-foreground/20'}>★</span>
+                        ))}
+                      </span>
                     ) : (
                       <span className="text-muted-foreground/40 text-xs">—</span>
                     )}
