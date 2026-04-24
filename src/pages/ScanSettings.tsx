@@ -278,8 +278,13 @@ export default function ScanSettings() {
       fetchScans();
     } catch (e: any) {
       if (e.message === 'GMAIL_RECONNECT_REQUIRED') {
-        toast.error('Gmail connection expired — please reconnect.', { duration: 8000 });
-        handleConnectGmail();
+        toast.error('Gmail connection expired. Click "Reconnect" to fix it.', {
+          duration: 8000,
+          action: {
+            label: 'Reconnect',
+            onClick: () => document.getElementById('gmail-reconnect-btn')?.click(),
+          },
+        });
       } else {
         toast.error(e.message || 'Scan failed');
       }

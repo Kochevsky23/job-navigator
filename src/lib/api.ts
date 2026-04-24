@@ -17,6 +17,7 @@ export async function runDailyScan(): Promise<{
     } catch {}
     throw new Error(msg);
   }
+  const data = await resp.json();
   return data;
 }
 
