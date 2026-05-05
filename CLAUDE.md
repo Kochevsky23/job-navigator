@@ -95,7 +95,7 @@ In Supabase Secrets: `CLAUDE_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET
 | `ml-feedback` | ✅ | Daily cron | Re-score jobs using user star ratings as ground truth. Computes precision/recall/F1 metrics. Does NOT run inside daily-scan — separate cron. |
 | `security-review` | ✅ | Manual | Read-only security & privacy analysis. 12 static architectural checks + runtime DB checks. Returns structured findings JSON. |
 | `reanalyze-jobs` | ✅ | — | Re-score all existing jobs with updated profile |
-| `skills-gap` | ✅ | Weekly | Identify skill gaps from job descriptions |
+| `skills-gap` | ✅ | Weekly | Weekly Claude/MCP discovery digest: scrapes Smithery registry + awesome-mcp-servers + official MCP servers, asks Claude to pick top tools relevant to Job Compass, emails all users |
 | `extract-cv-text` | ✅ | — | Parse CV PDF on upload |
 | `gmail-oauth` / `gmail-oauth-start` / `gmail-oauth-callback` | ✅ | — | Gmail OAuth flow |
 
@@ -153,7 +153,7 @@ In Supabase Secrets: `CLAUDE_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET
 | 6 | Cover Letter | claude-sonnet-4-6 | On demand | Job + profile + raw CV → 3-paragraph letter |
 | 7 | Interview Prep | claude-sonnet-4-6 | On demand | Job + profile → 10 behavioral/technical Q&A pairs |
 | 8 | Company Research | claude-haiku-4-5 | On demand | Company + role + description → company brief |
-| 9 | Skills Gap | claude-sonnet-4-5 | On demand (Settings) | Profile + last 50 job descriptions → ranked missing skills |
+| 9 | MCP Digest | claude-sonnet-4-20250514 | Weekly cron | Smithery + GitHub MCP lists → top tools ranked for Job Compass → email digest to all users |
 
 **Token optimization:** All Claude calls use prompt caching (`anthropic-beta: prompt-caching-2024-07-31`). Static content (system prompt, profile, scoring rules) marked `cache_control: {type: "ephemeral"}`. Saves ~60-70% on repeated static content within a scan run.
 
