@@ -1,4 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CV_MAX_CHARS = 8000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,7 +15,7 @@ Deno.serve(async (req) => {
 
   try {
     const { jobId } = await req.json();
-    if (!jobId) throw new Error("jobId is required");
+    if (!jobId || !UUID_RE.test(jobId)) throw new Error("Invalid jobId");
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -24,6 +28,9 @@ Deno.serve(async (req) => {
       .eq("id", jobId)
       .single();
     if (jobError || !job) throw new Error("Job not found");
+
+    const rl = await checkRateLimit(supabase, job.user_id, "generate-cover-letter", 10);
+    if (!rl.allowed) throw new Error(`Rate limit reached. Try again in ${Math.ceil((rl.retryAfterSeconds ?? 3600) / 60)} minutes.`);
 
     const { data: profile } = await supabase
       .from("user_profiles")
@@ -61,7 +68,7 @@ AI SCORING NOTES (why this job matched the candidate):
 ${job.reason || "Not available"}
 
 CANDIDATE CV (for background context — do NOT copy paste, synthesize):
-${cvText}
+${cvText.substring(0, CV_MAX_CHARS)}
 
 INSTRUCTIONS:
 1. Opening paragraph: Hook the reader. State the role, express genuine enthusiasm for this specific company (mention something real about them from the job description). Connect one key strength of the candidate to the company's needs.

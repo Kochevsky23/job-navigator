@@ -21,7 +21,8 @@ When user says "Session Ended":
 When user says "Session Started":
 1. Read all memory files in the path above.
 2. Acknowledge current project state.
-3. Ask what to work on or continue from last session.
+3. Generate a **To-Do List** for this session: unfinished tasks from last session + recommendations based on current state.
+4. Ask what to work on or continue from last session.
 
 ---
 
@@ -44,6 +45,7 @@ When user says "Session Started":
 - **Deploy function**: `cd /Users/dorkochevsky/job-navigator && npx supabase functions deploy <name> --project-ref updzignrofsvyoceeddw`
 - **DB push**: `cd /Users/dorkochevsky/job-navigator && npx supabase db push --linked`
 - **Dev server**: `npm run dev` from worktree dir. HMR active — file saves update browser instantly.
+- **CRITICAL — always find the RUNNING worktree first**: `lsof -i :8080 -sTCP:LISTEN | grep node | awk '{print $2}' | xargs -I{} lsof -p {} 2>/dev/null | grep cwd | awk '{print $NF}'`. Edit files in THAT path. The session worktree (`clever-volhard-*`) may differ from the running one (`busy-hertz-*`). Sync with: `rsync -a --delete <session-wt>/src/ <running-wt>/src/`
 - **Memory files**: `/Users/dorkochevsky/.claude/projects/-Users-dorkochevsky-job-navigator/memory/`
 
 ### Env Vars (edge functions)
@@ -85,10 +87,10 @@ In Supabase Secrets: `CLAUDE_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET
 |----------|-----|------|---------|
 | `daily-scan` | ❌ | — | Main scan engine: Gmail → extract → score → upsert |
 | `scheduled-scan` | ❌ | 7am + 7pm UTC | Cron entry point — invokes daily-scan for all users |
-| `generate-cv` | ❌ | — | Tailored CV per job → `jobs.tailored_cv` |
-| `generate-cover-letter` | ❌ | — | Cover letter per job → `jobs.cover_letter` |
-| `interview-prep` | ❌ | — | 10 Q&A pairs per job → `jobs.interview_prep` |
-| `company-research` | ❌ | — | Company brief per job → `jobs.company_research` |
+| `generate-cv` | ✅ | — | Tailored CV per job → `jobs.tailored_cv`. Rate limit: 10/hr. UUID-validates jobId. CV capped at 8K chars. |
+| `generate-cover-letter` | ✅ | — | Cover letter per job → `jobs.cover_letter`. Rate limit: 10/hr. |
+| `interview-prep` | ✅ | — | 10 Q&A pairs per job → `jobs.interview_prep`. Rate limit: 10/hr. |
+| `company-research` | ✅ | — | Company brief per job → `jobs.company_research`. Rate limit: 20/hr. |
 | `update-job-statuses` | ✅ | Evening only | Gmail status change detection (no Claude API) |
 | `ml-feedback` | ✅ | Daily cron | Re-score jobs using user star ratings as ground truth. Computes precision/recall/F1 metrics. Does NOT run inside daily-scan — separate cron. |
 | `security-review` | ✅ | Manual | Read-only security & privacy analysis. 12 static architectural checks + runtime DB checks. Returns structured findings JSON. |
@@ -135,7 +137,7 @@ In Supabase Secrets: `CLAUDE_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET
 
 **Job aging (evening only):** New→Old after 7 days, Old→Archive after 14 days.
 
-**ML feedback (separate daily cron):** `ml-feedback` runs independently — NOT part of the daily-scan steps above. It reads all user-rated jobs (`user_score IS NOT NULL`), treats 4-5★ as positive and 1-2★ as negative, computes precision/recall/F1 comparing AI priority vs user preference, and can produce scoring hints.
+**ML feedback:** `ml-feedback` is called inside `scheduled-scan` automatically (every run, if not called in last 3 days). Also has a standalone cron at 6 AM UTC (`job-navigator-ml-feedback-daily`). Needs ≥3 rated jobs. Treats 4-5★ as positive, 1-2★ as negative, 3★ neutral (skipped). Computes precision/recall/F1.
 
 ---
 

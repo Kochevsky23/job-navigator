@@ -317,9 +317,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Step 5: Advance timestamp ─────────────────────────────────────────────
+    // ── Step 5: Advance timestamp + save status changes for Pipeline ─────────
+    const profileUpdate: Record<string, any> = { last_status_sync_timestamp: nowSec };
+    if (updates.length > 0) {
+      profileUpdate.last_status_changes = {
+        scanned_at: new Date().toISOString(),
+        changes: updates,
+      };
+    }
     await supabase.from("user_profiles")
-      .update({ last_status_sync_timestamp: nowSec })
+      .update(profileUpdate)
       .eq("id", userId);
 
     console.log(`[update-job-statuses] Done: ${statusesUpdated} updated. Timestamp → ${nowSec}`);

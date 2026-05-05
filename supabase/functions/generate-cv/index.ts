@@ -1,4 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CV_MAX_CHARS = 8000; // ~2K tokens — enough context, avoids sending full PII dump
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -115,7 +119,7 @@ Deno.serve(async (req) => {
 
   try {
     const { jobId } = await req.json();
-    if (!jobId) throw new Error("jobId is required");
+    if (!jobId || !UUID_RE.test(jobId)) throw new Error("Invalid jobId");
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -128,6 +132,10 @@ Deno.serve(async (req) => {
       .eq("id", jobId)
       .single();
     if (jobError || !job) throw new Error("Job not found");
+
+    // Rate limit: 10 CV generations per user per hour
+    const rl = await checkRateLimit(supabase, job.user_id, "generate-cv", 10);
+    if (!rl.allowed) throw new Error(`Rate limit reached. Try again in ${Math.ceil((rl.retryAfterSeconds ?? 3600) / 60)} minutes.`);
 
     const { data: profile } = await supabase
       .from("user_profiles")
@@ -170,7 +178,7 @@ CANDIDATE BACKGROUND:
 ${candidateContext || "See CV below"}
 
 FULL CV (source of truth for all facts):
-${cvText}
+${cvText.substring(0, CV_MAX_CHARS)}
 
 TAILORING RULES:
 1. KEYWORDS: Extract exact tech terms from job description. Mirror their language precisely.
