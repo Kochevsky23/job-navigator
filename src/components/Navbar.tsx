@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut, Menu, X, User, Sun, Moon, Bug } from 'lucide-react';
+import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut, Menu, X, User, Sun, Moon, Bug, Shield } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
@@ -13,6 +13,7 @@ const links = [
   { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/debug', label: 'Debug', icon: Bug },
+  { to: '/security', label: 'Security', icon: Shield },
 ];
 
 export default function Navbar() {

@@ -95,6 +95,21 @@ export async function runMLFeedback(): Promise<{
   return data;
 }
 
+export async function runSecurityReview(save = false): Promise<{
+  success: boolean;
+  checked_at: string;
+  checks_performed: { static_architectural: number; runtime_db: number; note: string };
+  summary: { total_findings: number; critical: number; high: number; medium: number; low: number };
+  findings: unknown[];
+}> {
+  const { data, error } = await supabase.functions.invoke('security-review', { body: { save } });
+  if (error) {
+    await debugLog({ severity: 'error', module: 'edge_function', message: `security-review failed: ${error.message || 'Security review failed'}`, error, functionName: 'runSecurityReview', fileName: 'src/lib/api.ts' });
+    throw new Error(error.message || 'Security review failed');
+  }
+  return data;
+}
+
 export async function fetchSkillsGap(): Promise<{
   gap_skills: { skill: string; frequency: number; priority: string; context: string; learn_tip: string }[];
   summary: string;

@@ -90,7 +90,8 @@ In Supabase Secrets: `CLAUDE_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET
 | `interview-prep` | ❌ | — | 10 Q&A pairs per job → `jobs.interview_prep` |
 | `company-research` | ❌ | — | Company brief per job → `jobs.company_research` |
 | `update-job-statuses` | ✅ | Evening only | Gmail status change detection (no Claude API) |
-| `ml-feedback` | ✅ | Daily | Re-score jobs from user ratings |
+| `ml-feedback` | ✅ | Daily cron | Re-score jobs using user star ratings as ground truth. Computes precision/recall/F1 metrics. Does NOT run inside daily-scan — separate cron. |
+| `security-review` | ✅ | Manual | Read-only security & privacy analysis. 12 static architectural checks + runtime DB checks. Returns structured findings JSON. |
 | `reanalyze-jobs` | ✅ | — | Re-score all existing jobs with updated profile |
 | `skills-gap` | ✅ | Weekly | Identify skill gaps from job descriptions |
 | `extract-cv-text` | ✅ | — | Parse CV PDF on upload |
@@ -133,6 +134,8 @@ In Supabase Secrets: `CLAUDE_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET
 | Evening scan | 7:00 PM UTC | forced "scan_and_status" + job aging |
 
 **Job aging (evening only):** New→Old after 7 days, Old→Archive after 14 days.
+
+**ML feedback (separate daily cron):** `ml-feedback` runs independently — NOT part of the daily-scan steps above. It reads all user-rated jobs (`user_score IS NOT NULL`), treats 4-5★ as positive and 1-2★ as negative, computes precision/recall/F1 comparing AI priority vs user preference, and can produce scoring hints.
 
 ---
 

@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.company-research]
 verify_jwt = false
+
+[functions.security-review]
+verify_jwt = true
