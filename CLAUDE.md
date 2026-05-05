@@ -1,4 +1,4 @@
-# Job Compass – Claude Code Rules
+# Job Compass — Claude Code Rules
 
 ## Caveman Mode (ALWAYS ACTIVE)
 
@@ -25,16 +25,31 @@ When user says "Session Started":
 
 ---
 
+## Critical Working Rules
+
+- **ALWAYS edit the active worktree**, not the main project dir. Dev server runs from worktree — edits to main won't show in browser.
+- Find active worktree: `lsof -i :8080 -sTCP:LISTEN | grep node` then `lsof -p <PID> | grep cwd`
+- Worktrees live at: `/Users/dorkochevsky/job-navigator/.claude/worktrees/<name>/`
+- Edge functions always deploy from MAIN project dir (not worktree): `cd /Users/dorkochevsky/job-navigator && npx supabase functions deploy <name> --project-ref updzignrofsvyoceeddw`
+- **Commit + push every change to GitHub**: `git add` relevant files → `git commit` → `git push origin main`
+- GitHub: `https://github.com/Kochevsky23/job-navigator.git`
+
+---
+
 ## Project Context
 
 - **Stack**: React + TypeScript + Vite + Tailwind CSS + Supabase (DB + Edge Functions) + Anthropic Claude API
 - **Supabase project**: `updzignrofsvyoceeddw` (job-compass-v2, Tokyo)
-- **Deploy**: `npx supabase functions deploy <name> --project-ref updzignrofsvyoceeddw` (always from `/Users/dorkochevsky/job-navigator/`, never from worktree)
-- **DB push**: `npx supabase db push --linked` (config.toml project_id = `cpcqgzzntbxfjnjohttr`)
-- **Dev server**: runs from worktree dir. Check active worktree: `lsof -i :8080 -sTCP:LISTEN | grep node` then `lsof -p <PID> | grep cwd`. **Always edit files in the worktree** — HMR updates browser. Do NOT edit main project src files.
-- **Worktrees**: `/Users/dorkochevsky/job-navigator/.claude/worktrees/<name>/`
+- **config.toml project_id**: `cpcqgzzntbxfjnjohttr` (used by `db push --linked`)
+- **Deploy function**: `cd /Users/dorkochevsky/job-navigator && npx supabase functions deploy <name> --project-ref updzignrofsvyoceeddw`
+- **DB push**: `cd /Users/dorkochevsky/job-navigator && npx supabase db push --linked`
+- **Dev server**: `npm run dev` from worktree dir. HMR active — file saves update browser instantly.
 - **Memory files**: `/Users/dorkochevsky/.claude/projects/-Users-dorkochevsky-job-navigator/memory/`
-- **GitHub**: `https://github.com/Kochevsky23/job-navigator.git`
+
+### Env Vars (edge functions)
+Auto-injected: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+In Supabase Secrets: `CLAUDE_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `SCHEDULED_SCAN_SECRET`
+⚠️ Always use `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — `EXTERNAL_SUPABASE_URL` is NOT set.
 
 ---
 
@@ -54,7 +69,7 @@ When user says "Session Started":
 ### Key Components (`src/components/`)
 | File | Purpose |
 |------|---------|
-| `JobDetailPanel.tsx` | Side panel for job details — score, AI tools (CV, cover letter, interview prep, company research), notes, rating |
+| `JobDetailPanel.tsx` | Side panel: score, AI tools (CV, cover letter, interview prep, company research), notes, rating. CollapsibleSection component handles all 4 AI tools uniformly. CV shows only when score > 6. |
 | `Navbar.tsx` | Top nav |
 | `CompanyLogo.tsx` | Logo via Clearbit |
 
@@ -66,63 +81,205 @@ When user says "Session Started":
 | `supabase-external.ts` | `db` client (external schema) |
 
 ### Edge Functions (`supabase/functions/`)
-| Function | Trigger | Purpose |
-|----------|---------|---------|
-| `daily-scan` | Cron (every 2h) + manual | Gmail → extract jobs → score → upsert |
-| `scheduled-scan` | Cron wrapper | Invokes daily-scan on schedule |
-| `generate-cv` | Manual | Generate tailored CV for a job |
-| `generate-cover-letter` | Manual | Generate cover letter |
-| `interview-prep` | Manual | Generate interview prep notes |
-| `company-research` | Manual | Generate company research |
-| `update-job-statuses` | Manual (Sync Statuses btn) | Scan Gmail for status changes (applied/rejected/interview) |
-| `ml-feedback` | Cron (daily) | Re-score jobs based on user ratings |
-| `gmail-oauth` / `gmail-oauth-start` / `gmail-oauth-callback` | Auth flow | Gmail OAuth |
-| `reanalyze-jobs` | Manual | Re-score existing jobs with updated profile |
-| `skills-gap` | Cron (weekly) | Identify missing skills |
-| `extract-cv-text` | On CV upload | Parse CV PDF |
+| Function | JWT | Cron | Purpose |
+|----------|-----|------|---------|
+| `daily-scan` | ❌ | — | Main scan engine: Gmail → extract → score → upsert |
+| `scheduled-scan` | ❌ | 7am + 7pm UTC | Cron entry point — invokes daily-scan for all users |
+| `generate-cv` | ❌ | — | Tailored CV per job → `jobs.tailored_cv` |
+| `generate-cover-letter` | ❌ | — | Cover letter per job → `jobs.cover_letter` |
+| `interview-prep` | ❌ | — | 10 Q&A pairs per job → `jobs.interview_prep` |
+| `company-research` | ❌ | — | Company brief per job → `jobs.company_research` |
+| `update-job-statuses` | ✅ | Evening only | Gmail status change detection (no Claude API) |
+| `ml-feedback` | ✅ | Daily | Re-score jobs from user ratings |
+| `reanalyze-jobs` | ✅ | — | Re-score all existing jobs with updated profile |
+| `skills-gap` | ✅ | Weekly | Identify skill gaps from job descriptions |
+| `extract-cv-text` | ✅ | — | Parse CV PDF on upload |
+| `gmail-oauth` / `gmail-oauth-start` / `gmail-oauth-callback` | ✅ | — | Gmail OAuth flow |
 
-### Daily Scan Flow (daily-scan/index.ts)
+---
+
+## Daily Scan Flow (`daily-scan/index.ts`)
+
 ```
-[1] Get Google access token
-[2] Fetch Gmail emails since last_email_scan_timestamp
-[3] Load candidate profile from user_profiles (cached)
-[4] Extract jobs from emails via Claude (batched)
-[5] Fetch LinkedIn descriptions for each job
-[6] Score jobs via Claude (exp extraction + scoring)
-[7] Upsert to jobs table (fingerprint dedup), update timestamp, insert scan_run
+[1] Get Google access token (refresh via GOOGLE_CLIENT_ID/SECRET)
+[2] Fetch Gmail emails since last_email_scan_timestamp (7-day max lookback)
+    → Pre-filter to job alert senders/labels
+    → Cap at 60 emails/run
+[3] Load candidate_profile from user_profiles (cached in DB)
+[4] Extract jobs from emails via Claude (batches of 5, parallel)
+    → Model: claude-sonnet-4-5
+    → Returns: company, role, location, linkedin_id, job_link, exp_required
+[5] Fetch job descriptions (batches of 10, parallel):
+    → LinkedIn guest API: linkedin.com/jobs-guest/jobs/api/jobPosting/{id}
+    → Company careers page (CSS selector scrape)
+    → Fallback: email_context (snippet from email body) — sets low_confidence=true
+[6] Extract experience levels via Claude (batches of 10)
+    → Model: claude-haiku-4-5-20251001
+    → Returns actual_exp_required + evidence quote per job
+[6] Score jobs via Claude (sequential batches of 10)
+    → Model: claude-sonnet-4-5
+    → Returns: score 0-10, priority, reason
+[7] Upsert to jobs table (fingerprint dedup, ignoreDuplicates)
+    → low_confidence update in separate pass (tolerates schema cache lag)
+    → Update last_email_scan_timestamp
+    → Insert scan_run record
+    → Send email digest (Resend) with top HIGH priority jobs
 ```
 
-### DB Tables
-**`jobs`** — main table
+**Scheduling (pg_cron — exactly 2 jobs):**
+| Name | Schedule | Mode |
+|------|----------|------|
+| Morning scan | 7:00 AM UTC | auto → "scan" |
+| Evening scan | 7:00 PM UTC | forced "scan_and_status" + job aging |
+
+**Job aging (evening only):** New→Old after 7 days, Old→Archive after 14 days.
+
+---
+
+## AI Agents
+
+| # | Name | Model | When | Input → Output |
+|---|------|-------|------|----------------|
+| 1 | Profile Parser | claude-haiku-4-5 | Once per user (cached) | Raw CV text → structured `candidate_profile` JSON |
+| 2 | Job Extractor | claude-sonnet-4-5 | Every scan, batches of 5 | Gmail job alert emails → jobs list |
+| 3 | Experience Extractor | claude-haiku-4-5 | Every scan, batches of 10 | Job descriptions → `actual_exp_required` + evidence |
+| 4 | Job Scorer | claude-sonnet-4-5 | Every scan, sequential batches of 10 | Descriptions + exp + profile → score, priority, reason |
+| 5 | CV Tailor | claude-sonnet-4-6 | On demand (score > 6) | Job + profile + raw CV → tailored CV (ATS plain text) |
+| 6 | Cover Letter | claude-sonnet-4-6 | On demand | Job + profile + raw CV → 3-paragraph letter |
+| 7 | Interview Prep | claude-sonnet-4-6 | On demand | Job + profile → 10 behavioral/technical Q&A pairs |
+| 8 | Company Research | claude-haiku-4-5 | On demand | Company + role + description → company brief |
+| 9 | Skills Gap | claude-sonnet-4-5 | On demand (Settings) | Profile + last 50 job descriptions → ranked missing skills |
+
+**Token optimization:** All Claude calls use prompt caching (`anthropic-beta: prompt-caching-2024-07-31`). Static content (system prompt, profile, scoring rules) marked `cache_control: {type: "ephemeral"}`. Saves ~60-70% on repeated static content within a scan run.
+
+---
+
+## Scoring Logic
+
+### Hard Rejection Rules (student/fresh_graduate)
+1. Requires 3+ years → REJECTED
+2. Title has Senior/Lead/Principal/Manager/Director/Head/VP/Architect/Chief → REJECTED
+3. `exp_required` is "Mid-level" → REJECTED
+4. Domain completely unrelated (pure finance, legal, medical, civil engineering) → REJECTED
+
+### Two-Step Experience Extraction
+Email `exp_required` field is **UNRELIABLE** — often "Not specified" even when description is explicit.
+- STEP 1: Scan full description for actual experience requirement
+- CRITICAL: Use MINIMUM/REQUIRED only — never "preferred"/"advantage"
+  - "required: 2+ yrs" + "preferred: 3-5 yrs" → use "2+ years"
+  - Range "2-5 years" → use lower bound "2+ years"
+- STEP 2: Apply hard rejection rules using extracted level (not email label)
+
+### Factor Weights (0–10 total)
+| Factor | Points | Details |
+|--------|--------|---------|
+| Skills Match | 0–3 | 3=80%+, 2=50-79%, 1=25-49%, 0=<25% |
+| **Experience Fit** | **0–5** | **Primary factor (50% of score)** |
+| Field Relevance | 0–1 | Domain/education match |
+| Location Fit | 0–1 | Within ~40km of candidate city |
+
+**Experience fit (student candidate):** 5=student/intern exact, 4=entry-level/grad, 3=junior, 2=not specified, 1=1-3 yrs required, 0=major mismatch→reject
+
+**Caps:** Junior/entry-junior → cap 7. Location >40km → FACTOR 4=0 AND cap 7.
+
+### Priority Thresholds
+HIGH: 8-10 · MEDIUM: 5-7 · LOW: 2-4 · REJECTED: 0-1
+
+Post-scoring: priority re-derived from score EXCEPT if Claude returned REJECTED (hard rules always preserved).
+
+---
+
+## Database Schema
+
+### `jobs` table
 ```
-id, user_id, created_at, company, role, location, score(0-10), priority(HIGH|MEDIUM|LOW|REJECTED),
-reason, exp_required, job_link, linkedin_id, company_domain, fingerprint, alert_date, status,
-tailored_cv, cover_letter, interview_prep, company_research, notes, user_score, applied_at,
-description, low_confidence
+id, user_id, created_at
+company, role, location, score(0-10), priority(HIGH|MEDIUM|LOW|REJECTED)
+reason, exp_required, description, low_confidence(bool, default false)
+job_link, linkedin_id, company_domain, fingerprint, alert_date, status
+tailored_cv, cover_letter, interview_prep, company_research
+notes, user_score(1-5), applied_at
 ```
 
-**`scan_runs`** — scan history
+**Fingerprint strategy:**
+- Has linkedin_id → `linkedin::<id>`
+- Has valid URL → `link::<url>`
+- Fallback → `meta::<company>__<role>__<location>`
+
+**Status values:** `New | Old | Applied | Interviewing | Offer | Rejected | Archive`
+
+### `scan_runs` table
 ```
 id, user_id, started_at, success, jobs_found, jobs_added, error_text
 ```
 
-**`user_profiles`** — candidate data
+### `user_profiles` table
 ```
-id(=user_id), name, city, skills[], experience_level, last_email_scan_timestamp, ...
-```
-
-**`debug_logs`** — frontend/edge errors
-```
-id, created_at, severity, module, message, debug_id, suggested_fix, raw_details
+id (= auth.users id), full_name, cv_text, candidate_profile(jsonb)
+google_refresh_token, last_email_scan_timestamp
 ```
 
-### Scoring Logic (see memory/scoring_logic.md for full details)
-- Hard reject: 3+ yrs required, Senior/Lead/Manager titles, Mid-level exp
-- Score 0–10: Skills(0-3) + Experience fit(0-5) + Field relevance(0-1) + Location(0-1)
-- Priority: HIGH=8-10, MEDIUM=5-7, LOW=2-4, REJECTED=0-1
-- Show Generate CV button only if `score > 6`
+### `candidate_profile` JSON structure
+```json
+{
+  "name": "", "experience_level": "student|fresh_graduate|junior|mid|senior",
+  "years_of_experience": 0, "skills": [], "education_field": "",
+  "degree_level": "", "graduation_year": null, "domains": [],
+  "city": "", "languages": [], "job_type": ""
+}
+```
 
-### Fingerprint Strategy
-- LinkedIn job: `linkedin::<id>`
-- Has valid URL: `link::<url>`
-- Fallback: `meta::<company>__<role>__<location>`
+### `debug_logs` table
+```
+id, debug_id(8-char), created_at, severity(info|warning|error|critical)
+module(frontend|supabase|edge_function|gmail|claude_api|database)
+message, file_name, function_name, stack_trace, suggested_fix, raw_details(jsonb), user_id
+```
+
+---
+
+## Debug System
+
+Every error gets an 8-char **Debug ID** traceable across frontend, edge functions, and `debug_logs` table.
+
+**View logs:** `/debug` route in the app.
+
+### Add logging — Frontend
+```typescript
+import { debugLog } from '@/lib/debug';
+const debugId = await debugLog({
+  severity: 'error',
+  module: 'supabase',
+  message: 'Profile update failed',
+  error: err,
+  fileName: 'src/pages/ScanSettings.tsx',
+  functionName: 'handleSave',
+  rawDetails: { userId: user.id },
+});
+toast.error(`Save failed [${debugId}]`);
+```
+
+### Add logging — Edge Functions
+```typescript
+import { createDebugLogger } from "../_shared/debug.ts";
+const debug = createDebugLogger("my-function", supabase, userId);
+const debugId = await debug.error("Gmail token expired", err, { emailCount: 5 });
+return new Response(JSON.stringify({ error: "...", debugId }), { status: 500 });
+```
+
+**Sensitive keys auto-redacted:** `api_key`, `token`, `refresh_token`, `secret`, `password`, `cv_text`, `email_body`
+
+---
+
+## Key Bug Fixes (for historical context)
+
+| Bug | Root Cause | Fix |
+|-----|-----------|-----|
+| `supabaseUrl is required` in generate-cv | Used `EXTERNAL_SUPABASE_URL` (not set) | Changed to `SUPABASE_URL` |
+| Wrong candidate_profile fields | `cp.years_experience`, `cp.preferred_locations` | Fixed to `cp.years_of_experience`, `cp.city` |
+| Exp extraction picking "preferred" level | No "minimum vs preferred" rules in STEP 1 prompt | Added CRITICAL RULES section |
+| Evening cron ran "scan" not "scan_and_status" | Body was `{}`, auto-detect defaulted to "scan" | Migration to send `{"mode": "scan_and_status"}` |
+| CV download was .md not PDF | Old `URL.createObjectURL` approach | Replaced with `window.open` + `window.print()` |
+| `low_confidence` upsert crash | Column not in PostgREST schema cache | Upsert without column, separate tolerant update pass |
+| 0 jobs added every scan | `low_confidence` crash aborted upsert | Fixed by separating upsert payload from flag update |
+| Train AI button shown in Dashboard | Removed — redundant, cron handles it automatically | Deleted button + handler |
