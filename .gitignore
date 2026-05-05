@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Tool/IDE directories
+.windsurf/
+.agents/
+.Rhistory
+.claude/worktrees/
+supabase/.temp/
