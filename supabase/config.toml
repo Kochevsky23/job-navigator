@@ -3,8 +3,20 @@ project_id = "cpcqgzzntbxfjnjohttr"
 [functions.daily-scan]
 verify_jwt = false
 
+[functions.scheduled-scan]
+verify_jwt = false
+
 [functions.generate-cv]
 verify_jwt = false
 
 [functions.cleanup-duplicates]
+verify_jwt = false
+
+[functions.generate-cover-letter]
+verify_jwt = false
+
+[functions.interview-prep]
+verify_jwt = false
+
+[functions.company-research]
 verify_jwt = false

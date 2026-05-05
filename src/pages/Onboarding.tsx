@@ -111,6 +111,7 @@ export default function Onboarding() {
         cv_filename: file.name,
         cv_text: cvText,
         cv_uploaded_at: new Date().toISOString(),
+        candidate_profile: null,
       }).eq('id', user.id);
 
       if (cvText) {

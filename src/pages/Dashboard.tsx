@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/supabase-external';
-import { runDailyScan } from '@/lib/api';
+import { runDailyScan, syncJobStatuses } from '@/lib/api';
 import { Job, ScanRun } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, AlertTriangle, FileText, Loader2, Radar, ArrowRight, CheckCircle2, XCircle, Send, BarChart3, User, MapPin } from 'lucide-react';
+import { Briefcase, AlertTriangle, FileText, Loader2, Radar, ArrowRight, CheckCircle2, XCircle, Send, BarChart3, User, MapPin, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -103,6 +103,7 @@ export default function Dashboard() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [scans, setScans] = useState<ScanRun[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [userName, setUserName] = useState('');
@@ -148,6 +149,27 @@ export default function Dashboard() {
       toast.error(e.message || 'Scan failed');
     } finally {
       setScanning(false);
+    }
+  };
+
+
+  const handleSyncStatuses = async () => {
+    setSyncing(true);
+    try {
+      const result = await syncJobStatuses();
+      if (result.statusesUpdated === 0) {
+        toast.info(`Scanned ${result.emailsFound ?? 0} emails across ${result.jobsChecked} jobs — no status changes detected`);
+      } else {
+        const details = result.updates
+          .map((u: any) => `${u.company}: ${u.oldStatus} → ${u.newStatus}`)
+          .join(', ');
+        toast.success(`${result.statusesUpdated} status${result.statusesUpdated === 1 ? '' : 'es'} updated: ${details}`);
+        fetchData();
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Status sync failed');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -206,17 +228,20 @@ export default function Dashboard() {
   }
 
   const stats = [
-    { label: 'Total Jobs', value: jobs.length, icon: Briefcase, iconBg: 'bg-primary/10', iconColor: 'text-primary', border: 'border-b-primary' },
-    { label: 'High Priority', value: highPriority, icon: AlertTriangle, iconBg: 'bg-[hsl(var(--priority-high)/0.12)]', iconColor: 'text-[hsl(var(--priority-high))]', border: 'border-b-[hsl(var(--priority-high))]' },
-    { label: 'Applied', value: appliedCount, icon: Send, iconBg: 'bg-accent/10', iconColor: 'text-accent', border: 'border-b-accent' },
-    { label: 'CVs Generated', value: cvsGenerated, icon: FileText, iconBg: 'bg-primary/10', iconColor: 'text-primary', border: 'border-b-primary' },
+    { label: 'Total Jobs', value: jobs.length, icon: Briefcase, iconBg: 'bg-primary/10', iconColor: 'text-primary', accent: 'hsl(155 100% 49%)' },
+    { label: 'High Priority', value: highPriority, icon: AlertTriangle, iconBg: 'bg-[hsl(var(--priority-high)/0.12)]', iconColor: 'text-[hsl(var(--priority-high))]', accent: 'hsl(155 100% 49%)' },
+    { label: 'Applied', value: appliedCount, icon: Send, iconBg: 'bg-accent/10', iconColor: 'text-accent', accent: 'hsl(214 100% 65%)' },
+    { label: 'CVs Generated', value: cvsGenerated, icon: FileText, iconBg: 'bg-primary/10', iconColor: 'text-primary', accent: 'hsl(155 100% 49%)' },
   ];
 
   return (
     <div className="container py-6 md:py-8 space-y-6 md:space-y-8">
 
       {/* Hero */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-up">
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-up glass-card rounded-2xl p-5 md:p-6 overflow-hidden">
+        <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{
+          background: 'radial-gradient(ellipse 60% 100% at 100% 50%, hsl(155 100% 49% / 0.04), transparent)',
+        }} />
         <div className="flex items-center gap-4">
           {avatarUrl ? (
             <img src={avatarUrl} alt="Profile"
@@ -234,14 +259,25 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="flex flex-col sm:items-end gap-2">
-          <button
-            onClick={handleScan}
-            disabled={scanning}
-            className={`btn-gradient flex items-center justify-center gap-2 text-sm w-full sm:w-auto ${scanning ? '' : 'animate-pulse-glow'}`}
-          >
-            {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
-            {scanning ? 'Scanning...' : 'Find New Jobs'}
-          </button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleScan}
+              disabled={scanning || syncing}
+              className={`btn-gradient flex items-center justify-center gap-2 text-sm flex-1 sm:flex-initial ${scanning ? '' : 'animate-pulse-glow'}`}
+            >
+              {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
+              {scanning ? 'Scanning...' : 'Find New Jobs'}
+            </button>
+            <button
+              onClick={handleSyncStatuses}
+              disabled={scanning || syncing}
+              title="Sync job statuses from Gmail"
+              className="flex items-center justify-center gap-2 text-sm rounded-xl border border-[hsl(var(--glass-border)/0.5)] px-4 py-2 hover:bg-[hsl(var(--glass-border)/0.2)] transition-colors disabled:opacity-50"
+            >
+              {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {syncing ? 'Syncing...' : 'Sync Statuses'}
+            </button>
+          </div>
           {/* Last Scan inline below button */}
           {lastScan && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -267,9 +303,10 @@ export default function Dashboard() {
         {stats.map((s, i) => (
           <div
             key={s.label}
-            className={`glass-card rounded-xl p-4 md:p-5 border-b-2 ${s.border} animate-fade-up`}
-            style={{ animationDelay: `${(i + 1) * 70}ms` }}
+            className="glass-card rounded-xl p-4 md:p-5 animate-fade-up relative overflow-hidden"
+            style={{ animationDelay: `${(i + 1) * 70}ms`, borderTop: `2px solid ${s.accent}40` }}
           >
+            <div className="absolute top-0 left-0 right-0 h-px" style={{ background: `linear-gradient(90deg, transparent, ${s.accent}60, transparent)` }} />
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="text-3xl md:text-4xl font-display font-bold tabular-nums leading-none">{s.value}</p>

@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Loader2, FileText, Download, Clock } from 'lucide-react';
+import { Loader2, FileText, Download, Clock, AlertCircle } from 'lucide-react';
 import JobDetailPanel from '@/components/JobDetailPanel';
 import CompanyLogo from '@/components/CompanyLogo';
 
@@ -45,7 +45,10 @@ export default function Jobs() {
   const filtered = useMemo(() => {
     return jobs.filter(j => {
       if (priorityFilter !== 'ALL' && j.priority !== priorityFilter) return false;
-      if (statusFilter !== 'ALL' && j.status !== statusFilter) return false;
+      // Hide Archive unless explicitly selected
+      if (statusFilter === 'Archive') { if (j.status !== 'Archive') return false; }
+      else if (statusFilter !== 'ALL') { if (j.status !== statusFilter) return false; }
+      else { if (j.status === 'Archive') return false; }
       if (j.score < minScore) return false;
       return true;
     });
@@ -111,9 +114,12 @@ export default function Jobs() {
           <SelectContent>
             <SelectItem value="ALL">All Statuses</SelectItem>
             <SelectItem value="New">New</SelectItem>
+            <SelectItem value="Old">Old</SelectItem>
             <SelectItem value="Applied">Applied</SelectItem>
             <SelectItem value="Interviewing">Interviewing</SelectItem>
+            <SelectItem value="Offer">Offer</SelectItem>
             <SelectItem value="Rejected">Rejected</SelectItem>
+            <SelectItem value="Archive">Archive</SelectItem>
           </SelectContent>
         </Select>
 
@@ -159,9 +165,15 @@ export default function Jobs() {
               filtered.map((job, i) => (
                 <TableRow
                   key={job.id}
-                  className={`cursor-pointer transition-colors duration-150 border-b border-[hsl(var(--glass-border)/0.15)] hover:bg-[hsl(var(--primary)/0.04)] ${
+                  className={`cursor-pointer transition-all duration-150 border-b border-[hsl(var(--glass-border)/0.15)] hover:bg-[hsl(var(--primary)/0.05)] group ${
                     i % 2 === 1 ? 'bg-[hsl(var(--glass-bg)/0.3)]' : ''
                   }`}
+                  style={{ borderLeft: '2px solid transparent' }}
+                  onMouseEnter={e => {
+                    const colors: Record<string, string> = { HIGH: 'hsl(155 100% 49% / 0.6)', MEDIUM: 'hsl(38 92% 50% / 0.6)', LOW: 'hsl(25 95% 53% / 0.6)', REJECTED: 'hsl(0 72% 51% / 0.6)' };
+                    (e.currentTarget as HTMLElement).style.borderLeft = `2px solid ${colors[job.priority] || 'transparent'}`;
+                  }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderLeft = '2px solid transparent'; }}
                   onClick={() => setSelectedJob(job)}
                 >
                   <TableCell className="font-medium" dir="auto">
@@ -170,7 +182,14 @@ export default function Jobs() {
                       <span className="truncate">{job.company}</span>
                     </div>
                   </TableCell>
-                  <TableCell dir="auto">{job.role}</TableCell>
+                  <TableCell dir="auto">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate">{job.role}</span>
+                      {(job as any).low_confidence && (
+                        <AlertCircle className="h-3.5 w-3.5 text-yellow-400 shrink-0" title="Low confidence — scored from email snippet only" />
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground" dir="auto">{job.location}</TableCell>
                   <TableCell>
                     <ScorePill score={job.score} />

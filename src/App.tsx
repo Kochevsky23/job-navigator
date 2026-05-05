@@ -16,6 +16,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
+import DebugDashboard from "./pages/DebugDashboard";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,10 @@ const App = () => (
               <Route
                 path="/settings"
                 element={<ProtectedRoute><><Navbar /><ScanSettings /></></ProtectedRoute>}
+              />
+              <Route
+                path="/debug"
+                element={<ProtectedRoute><><Navbar /><DebugDashboard /></></ProtectedRoute>}
               />
               <Route path="*" element={<NotFound />} />
             </Routes>

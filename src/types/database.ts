@@ -1,5 +1,5 @@
 export type Priority = 'HIGH' | 'MEDIUM' | 'LOW' | 'REJECTED';
-export type JobStatus = 'New' | 'Applied' | 'Interviewing' | 'Offer' | 'Rejected';
+export type JobStatus = 'New' | 'Old' | 'Applied' | 'Interviewing' | 'Offer' | 'Rejected' | 'Archive';
 
 export interface Job {
   id: string;
@@ -21,6 +21,9 @@ export interface Job {
   company_domain: string | null;
   notes: string | null;
   user_score: number | null;
+  cover_letter: string | null;
+  interview_prep: string | null;
+  company_research: string | null;
 }
 
 export interface ScanRun {

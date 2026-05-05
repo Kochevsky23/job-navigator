@@ -22,6 +22,7 @@ export type Database = {
           company_domain: string | null
           created_at: string
           deadline: string | null
+          description: string | null
           exp_required: string | null
           fingerprint: string | null
           id: string
@@ -44,6 +45,7 @@ export type Database = {
           company_domain?: string | null
           created_at?: string
           deadline?: string | null
+          description?: string | null
           exp_required?: string | null
           fingerprint?: string | null
           id?: string
@@ -66,6 +68,7 @@ export type Database = {
           company_domain?: string | null
           created_at?: string
           deadline?: string | null
+          description?: string | null
           exp_required?: string | null
           fingerprint?: string | null
           id?: string
@@ -116,6 +119,7 @@ export type Database = {
       user_profiles: {
         Row: {
           avatar_url: string | null
+          candidate_profile: Json | null
           city: string | null
           created_at: string | null
           cv_filename: string | null
@@ -127,6 +131,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          candidate_profile?: Json | null
           city?: string | null
           created_at?: string | null
           cv_filename?: string | null
@@ -138,6 +143,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          candidate_profile?: Json | null
           city?: string | null
           created_at?: string | null
           cv_filename?: string | null

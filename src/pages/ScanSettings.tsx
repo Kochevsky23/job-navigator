@@ -74,9 +74,9 @@ export default function ScanSettings() {
   const handleReanalyzeJobs = async () => {
     setReanalyzing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('reanalyze-jobs');
+      const { data, error } = await supabase.functions.invoke('reanalyze-jobs', { body: { forceAll: true } });
       if (error) throw new Error(error.message || 'Reanalysis failed');
-      toast.success(`Updated ${data.updated} job${data.updated !== 1 ? 's' : ''} with improved reasoning.`);
+      toast.success(`Re-scored ${data.updated} job${data.updated !== 1 ? 's' : ''} with your candidate profile.`);
     } catch (e: any) {
       toast.error(e.message || 'Failed to reanalyze jobs');
     } finally {
@@ -118,11 +118,9 @@ export default function ScanSettings() {
       const { data: oldProfile } = await supabase.from('user_profiles').select('cv_text').eq('id', user.id).single();
       const cvChanged = cvText !== (oldProfile as any)?.cv_text;
 
-      const { error } = await supabase.from('user_profiles').update({
-        full_name: fullName,
-        city,
-        cv_text: cvText,
-      }).eq('id', user.id);
+      const updatePayload: Record<string, any> = { full_name: fullName, city, cv_text: cvText };
+      if (cvChanged) updatePayload.candidate_profile = null;
+      const { error } = await supabase.from('user_profiles').update(updatePayload).eq('id', user.id);
       if (error) throw error;
       toast.success('Profile updated!');
 
@@ -219,6 +217,7 @@ export default function ScanSettings() {
         cv_filename: file.name,
         cv_text: extractedText,
         cv_uploaded_at: new Date().toISOString(),
+        candidate_profile: null,
       }).eq('id', user.id);
 
       setCvFilename(file.name);
@@ -594,7 +593,7 @@ export default function ScanSettings() {
           </Button>
           <Button onClick={handleReanalyzeJobs} disabled={reanalyzing} variant="outline" className="w-full gap-2" size="sm">
             {reanalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
-            {reanalyzing ? 'Re-analyzing...' : 'Fix Old Job Reasoning'}
+            {reanalyzing ? 'Re-scoring...' : 'Re-score All Jobs'}
           </Button>
         </CardContent>
       </Card>

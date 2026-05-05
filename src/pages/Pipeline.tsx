@@ -3,12 +3,14 @@ import { db } from '@/lib/supabase-external';
 import { Job, JobStatus } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, GripVertical } from 'lucide-react';
+import { Loader2, GripVertical, ArrowRight, RefreshCw } from 'lucide-react';
 import CompanyLogo from '@/components/CompanyLogo';
 import { toast } from 'sonner';
+import { formatDistanceToNow } from 'date-fns';
 
 const COLUMNS: { id: JobStatus; label: string; borderColor: string }[] = [
   { id: 'New', label: 'New', borderColor: 'border-t-accent' },
+  { id: 'Old', label: 'Old', borderColor: 'border-t-orange-400' },
   { id: 'Applied', label: 'Applied', borderColor: 'border-t-[hsl(var(--info))]' },
   { id: 'Interviewing', label: 'Interviewing', borderColor: 'border-t-[hsl(var(--warning))]' },
   { id: 'Offer', label: 'Offer', borderColor: 'border-t-[hsl(var(--success))]' },
@@ -31,13 +33,41 @@ function ScorePill({ score }: { score: number }) {
   );
 }
 
+interface StatusChange {
+  company: string;
+  role: string;
+  oldStatus: string;
+  newStatus: string;
+}
+
+interface LastStatusChanges {
+  scanned_at: string;
+  changes: StatusChange[];
+}
+
+const statusColor: Record<string, string> = {
+  Applied: 'text-[hsl(var(--info))]',
+  Interviewing: 'text-[hsl(var(--warning))]',
+  Offer: 'text-[hsl(var(--success))]',
+  Rejected: 'text-destructive',
+  New: 'text-accent',
+  Old: 'text-orange-400',
+};
+
 export default function Pipeline() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusChanges, setStatusChanges] = useState<LastStatusChanges | null>(null);
 
   const fetchJobs = async () => {
-    const { data } = await db.from('jobs').select('*').order('score', { ascending: false });
-    if (data) setJobs(data as unknown as Job[]);
+    const [jobsRes, profileRes] = await Promise.all([
+      db.from('jobs').select('*').neq('status', 'Archive').order('score', { ascending: false }),
+      db.from('user_profiles').select('last_status_changes').single(),
+    ]);
+    if (jobsRes.data) setJobs(jobsRes.data as unknown as Job[]);
+    if ((profileRes.data as any)?.last_status_changes) {
+      setStatusChanges((profileRes.data as any).last_status_changes as LastStatusChanges);
+    }
     setLoading(false);
   };
 
@@ -74,8 +104,37 @@ export default function Pipeline() {
     <div className="container py-8 space-y-5">
       <h1 className="text-2xl font-display font-bold animate-fade-up">Pipeline</h1>
 
+      {/* Recent Status Changes */}
+      {statusChanges && statusChanges.changes.length > 0 && (
+        <div className="glass-card rounded-xl p-4 space-y-3 animate-fade-up border border-[hsl(var(--info)/0.2)] bg-[hsl(var(--info)/0.03)]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 text-[hsl(var(--info))]" />
+              <span className="text-sm font-semibold text-[hsl(var(--info))]">Status Updates Detected</span>
+              <span className="text-xs text-muted-foreground">
+                {formatDistanceToNow(new Date(statusChanges.scanned_at), { addSuffix: true })}
+              </span>
+            </div>
+            <span className="text-xs text-muted-foreground">{statusChanges.changes.length} change{statusChanges.changes.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="space-y-2">
+            {statusChanges.changes.map((c, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span className="font-medium truncate max-w-[120px]">{c.company}</span>
+                <span className="text-muted-foreground truncate max-w-[160px]">{c.role}</span>
+                <div className="flex items-center gap-1 ml-auto shrink-0">
+                  <span className={`text-xs font-medium ${statusColor[c.oldStatus] || 'text-muted-foreground'}`}>{c.oldStatus}</span>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <span className={`text-xs font-medium ${statusColor[c.newStatus] || 'text-muted-foreground'}`}>{c.newStatus}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 min-h-[60vh] animate-fade-up" style={{ animationDelay: '100ms' }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 min-h-[60vh] animate-fade-up" style={{ animationDelay: '100ms' }}>
           {COLUMNS.map((col) => {
             const colJobs = jobs.filter(j => j.status === col.id);
             return (
