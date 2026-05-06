@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/supabase-external';
-import { runDailyScan } from '@/lib/api';
+import { runDailyScan, runMLFeedback } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { ScanRun } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,6 +41,7 @@ export default function ScanSettings() {
   const [gmailConnected, setGmailConnected] = useState(false);
   const [connectingGmail, setConnectingGmail] = useState(false);
   const [reanalyzing, setReanalyzing] = useState(false);
+  const [runningML, setRunningML] = useState(false);
 
   // Handle ?gmail= callback from OAuth redirect
   useEffect(() => {
@@ -81,6 +82,27 @@ export default function ScanSettings() {
       toast.error(e.message || 'Failed to reanalyze jobs');
     } finally {
       setReanalyzing(false);
+    }
+  };
+
+  const handleRunML = async () => {
+    setRunningML(true);
+    try {
+      const result = await runMLFeedback();
+      if (result.message) {
+        toast.info(result.message);
+      } else if (result.metrics) {
+        const { precision, recall, f1 } = result.metrics;
+        toast.success(
+          `ML Feedback done — P: ${precision != null ? (precision * 100).toFixed(0) : 'N/A'}% R: ${recall != null ? (recall * 100).toFixed(0) : 'N/A'}% F1: ${f1 != null ? (f1 * 100).toFixed(0) : 'N/A'}%`
+        );
+      } else {
+        toast.success('ML Feedback complete');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'ML feedback failed');
+    } finally {
+      setRunningML(false);
     }
   };
 
@@ -594,6 +616,10 @@ export default function ScanSettings() {
           <Button onClick={handleReanalyzeJobs} disabled={reanalyzing} variant="outline" className="w-full gap-2" size="sm">
             {reanalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
             {reanalyzing ? 'Re-scoring...' : 'Re-score All Jobs'}
+          </Button>
+          <Button onClick={handleRunML} disabled={runningML} variant="outline" className="w-full gap-2" size="sm">
+            {runningML ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4 text-accent" />}
+            {runningML ? 'Running ML Feedback...' : 'Run ML Feedback'}
           </Button>
         </CardContent>
       </Card>
