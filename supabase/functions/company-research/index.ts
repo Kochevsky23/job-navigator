@@ -27,10 +27,9 @@ async function searchExa(company: string, domain: string): Promise<string> {
       headers: { "Content-Type": "application/json", "x-api-key": apiKey },
       body: JSON.stringify({
         query,
-        numResults: 4,
-        useAutoprompt: true,
-        type: "neural",
-        contents: { highlights: { numSentences: 2, highlightsPerUrl: 2 } },
+        num_results: 4,
+        type: "auto",
+        contents: { highlights: true },
       }),
     });
     if (!resp.ok) return "";
