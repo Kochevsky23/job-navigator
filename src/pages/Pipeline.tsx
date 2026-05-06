@@ -105,18 +105,33 @@ export default function Pipeline() {
       <h1 className="text-2xl font-display font-bold animate-fade-up">Pipeline</h1>
 
       {/* Recent Status Changes */}
-      {statusChanges && statusChanges.changes.length > 0 && (
-        <div className="glass-card rounded-xl p-4 space-y-3 animate-fade-up border border-[hsl(var(--info)/0.2)] bg-[hsl(var(--info)/0.03)]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <RefreshCw className="h-4 w-4 text-[hsl(var(--info))]" />
-              <span className="text-sm font-semibold text-[hsl(var(--info))]">Status Updates Detected</span>
+      <div className="glass-card rounded-xl p-4 space-y-3 animate-fade-up border border-[hsl(var(--glass-border)/0.3)]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 text-[hsl(var(--info))]" />
+            <span className="text-sm font-semibold">Last Status Scan</span>
+            {statusChanges?.scanned_at && (
               <span className="text-xs text-muted-foreground">
                 {formatDistanceToNow(new Date(statusChanges.scanned_at), { addSuffix: true })}
               </span>
-            </div>
-            <span className="text-xs text-muted-foreground">{statusChanges.changes.length} change{statusChanges.changes.length !== 1 ? 's' : ''}</span>
+            )}
           </div>
+          {statusChanges && (
+            <span className="text-xs text-muted-foreground">
+              {statusChanges.changes.length} change{statusChanges.changes.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+
+        {!statusChanges && (
+          <p className="text-xs text-muted-foreground">Status sync hasn't run yet. Runs automatically every evening.</p>
+        )}
+
+        {statusChanges && statusChanges.changes.length === 0 && (
+          <p className="text-xs text-muted-foreground">No status changes detected in last scan.</p>
+        )}
+
+        {statusChanges && statusChanges.changes.length > 0 && (
           <div className="space-y-2">
             {statusChanges.changes.map((c, i) => (
               <div key={i} className="flex items-center gap-2 text-sm">
@@ -130,8 +145,8 @@ export default function Pipeline() {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 min-h-[60vh] animate-fade-up" style={{ animationDelay: '100ms' }}>
