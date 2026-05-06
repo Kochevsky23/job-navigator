@@ -86,9 +86,13 @@ Rules:
 - If an email could match multiple companies, pick the most likely one
 - Understand both English and Hebrew emails
 - "We'll be in touch" / "will contact you soon" = NOT a rejection, skip it
-- Calendly / Greenhouse / Lever / scheduling links in snippet → "Interviewing"
 - Conditional offers ("pending background check") still count as "Offer"
 - Automated "application received" confirmations = "Applied" only if status is currently New/Old
+
+CRITICAL — rejection signals always win:
+- If subject or snippet contains: "unfortunately", "not moving forward", "other candidates", "not selected", "position filled", "decided to move forward with", "לא נוכל", "מצטערים", "לא עברת", "chose other" → classify as "Rejected" regardless of the sending platform
+- Greenhouse, Lever, Workday, SmartRecruiters, Taleo send BOTH rejections AND interview invites — do NOT infer "Interviewing" just because the email comes from one of these ATS platforms
+- Only classify as "Interviewing" when subject/snippet explicitly mentions: interview, screening call, schedule a call, next step, meet with us, calendly link, availability, "let's talk", "we'd like to speak" — AND there are no rejection keywords present
 
 Return ONLY a valid JSON array, no explanation, no markdown:
 [
@@ -263,7 +267,7 @@ Deno.serve(async (req) => {
             id,
             from: getHeader(data.payload, 'From'),
             subject: getHeader(data.payload, 'Subject'),
-            snippet: (data.snippet || '').slice(0, 200),
+            snippet: (data.snippet || '').slice(0, 400),
           } as EmailSummary;
         } catch {
           return null;
