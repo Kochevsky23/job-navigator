@@ -943,12 +943,17 @@ interface FollowupJob { company: string; role: string; applied_at: string; }
 async function sendEmailDigest(userEmail: string, addedJobs: ScoredJob[], followupJobs: FollowupJob[] = []): Promise<void> {
   const resendKey = Deno.env.get("RESEND_API_KEY");
   if (!resendKey) return;
-  const highJobs = addedJobs.filter(j => j.priority === "HIGH").slice(0, 5);
-  if (highJobs.length === 0 && followupJobs.length === 0) return;
+  if (addedJobs.length === 0 && followupJobs.length === 0) return;
 
-  const newJobsSection = highJobs.length > 0 ? `
+  // Top 5 by score: HIGH first, then MEDIUM to fill slots
+  const sorted = [...addedJobs].sort((a, b) => b.score - a.score);
+  const topJobs = sorted.slice(0, 5);
+  const hasHigh = topJobs.some(j => j.priority === "HIGH");
+  const subheading = hasHigh ? "Top HIGH priority matches:" : "Top matches from this scan:";
+
+  const newJobsSection = topJobs.length > 0 ? `
       <h2 style="color:#00f08e;margin-top:0">Job Compass — ${addedJobs.length} new job${addedJobs.length !== 1 ? "s" : ""} found</h2>
-      <p style="color:#aaa;margin-bottom:16px">Top HIGH priority matches:</p>
+      <p style="color:#aaa;margin-bottom:16px">${subheading}</p>
       <table style="width:100%;border-collapse:collapse;table-layout:fixed">
         <thead><tr style="background:#1a1a2e;border-bottom:2px solid #00f08e">
           <th style="padding:10px 8px;width:22%;text-align:left;color:#ffffff;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap">Company</th>
@@ -956,14 +961,14 @@ async function sendEmailDigest(userEmail: string, addedJobs: ScoredJob[], follow
           <th style="padding:10px 8px;width:13%;text-align:center;color:#ffffff;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap">Score</th>
           <th style="padding:10px 8px;width:25%;text-align:left;color:#ffffff;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">Location</th>
         </tr></thead>
-        <tbody>${highJobs.map(j => `
+        <tbody>${topJobs.map(j => `
     <tr style="border-bottom:1px solid #2a2a3a">
       <td style="padding:10px 8px;width:22%;color:#00f08e;font-weight:700;font-size:14px">${j.company}</td>
       <td style="padding:10px 8px;width:42%;color:#e8e8f0;font-size:14px">${j.role}</td>
       <td style="padding:10px 8px;width:10%;text-align:center;font-weight:700;color:#00f08e;font-size:15px">${j.score}/10</td>
       <td style="padding:10px 8px;width:26%;color:#aaaacc;font-size:13px">${j.location}</td>
     </tr>`).join("")}</tbody>
-      </table>` : `<h2 style="color:#00f08e;margin-top:0">Job Compass</h2><p style="color:#aaa">No new HIGH priority jobs today.</p>`;
+      </table>` : "";
 
   const followupSection = followupJobs.length > 0 ? `
       <h3 style="color:#f0a500;margin-top:28px;margin-bottom:8px">Follow-up Reminders</h3>
@@ -991,7 +996,7 @@ async function sendEmailDigest(userEmail: string, addedJobs: ScoredJob[], follow
       body: JSON.stringify({
         from: "Job Compass <onboarding@resend.dev>",
         to: [userEmail],
-        subject: `Job Compass: ${addedJobs.length} new job${addedJobs.length !== 1 ? "s" : ""}${highJobs.length > 0 ? ` — ${highJobs.length} HIGH priority` : ""}${followupJobs.length > 0 ? ` · ${followupJobs.length} follow-up` : ""}`,
+        subject: `Job Compass: ${addedJobs.length} new job${addedJobs.length !== 1 ? "s" : ""}${hasHigh ? ` — HIGH priority matches` : ""}${followupJobs.length > 0 ? ` · ${followupJobs.length} follow-up` : ""}`,
         html,
       }),
     });
