@@ -91,7 +91,7 @@ In Supabase Secrets: `CLAUDE_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET
 | `generate-cover-letter` | ✅ | — | Cover letter per job → `jobs.cover_letter`. Rate limit: 10/hr. |
 | `interview-prep` | ✅ | — | 10 Q&A pairs per job → `jobs.interview_prep`. Rate limit: 10/hr. |
 | `company-research` | ✅ | — | Company brief per job → `jobs.company_research`. Rate limit: 20/hr. |
-| `update-job-statuses` | ✅ | Evening only | Gmail status change detection (no Claude API) |
+| `update-job-statuses` | ✅ | Evening only | Gmail status change detection via Claude (claude-haiku-4-5). Uses `CLAUDE_API_KEY`. |
 | `ml-feedback` | ✅ | Daily cron | Re-score jobs using user star ratings as ground truth. Computes precision/recall/F1 metrics. Does NOT run inside daily-scan — separate cron. |
 | `security-review` | ✅ | Manual | Read-only security & privacy analysis. 12 static architectural checks + runtime DB checks. Returns structured findings JSON. |
 | `reanalyze-jobs` | ✅ | — | Re-score all existing jobs with updated profile |
@@ -161,11 +161,30 @@ In Supabase Secrets: `CLAUDE_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET
 
 ## Scoring Logic
 
-### Hard Rejection Rules (student/fresh_graduate)
+Scoring is **fully profile-aware** — rules derive from `candidate_profile.experience_level` per user. Both `daily-scan` and `reanalyze-jobs` call `buildHardRejectionRules(profile)` and `buildFactor2Examples(profile)` which branch on level.
+
+### Hard Rejection Rules (per experience level)
+
+**student / fresh_graduate:**
 1. Requires 3+ years → REJECTED
-2. Title has Senior/Lead/Principal/Manager/Director/Head/VP/Architect/Chief → REJECTED
+2. Title has Senior/Lead/Principal/Manager(mid+)/Director/Head/VP/Architect/Chief → REJECTED
 3. `exp_required` is "Mid-level" → REJECTED
-4. Domain completely unrelated (pure finance, legal, medical, civil engineering) → REJECTED
+4. Domain completely unrelated to candidate's education/domains → REJECTED
+
+**junior:**
+1. Requires 5+ years → REJECTED
+2. Title has Director/VP/Head/C-level/Chief → REJECTED
+3. Domain completely unrelated → REJECTED
+
+**mid:**
+1. Title has VP/C-level/Chief → REJECTED
+2. Student-only internship → REJECTED
+3. Domain completely unrelated → REJECTED
+
+**senior:**
+1. C-level role (CEO/CTO/COO/etc.) unless explicitly targets senior IC/director → REJECTED
+2. Student-only/intern-only → REJECTED
+3. Domain completely unrelated → REJECTED
 
 ### Two-Step Experience Extraction
 Email `exp_required` field is **UNRELIABLE** — often "Not specified" even when description is explicit.
@@ -183,9 +202,15 @@ Email `exp_required` field is **UNRELIABLE** — often "Not specified" even when
 | Field Relevance | 0–1 | Domain/education match |
 | Location Fit | 0–1 | Within ~40km of candidate city |
 
-**Experience fit (student candidate):** 5=student/intern exact, 4=entry-level/grad, 3=junior, 2=not specified, 1=1-3 yrs required, 0=major mismatch→reject
+**FACTOR 2 scale (all levels — 5=perfect fit, 4=one step away, 3=near fit, 2=unspecified, 1=clear gap, 0=hard reject)**
 
-**Caps:** Junior/entry-junior → cap 7. Location >40km → FACTOR 4=0 AND cap 7.
+Per-level scoring guides live in `buildHardRejectionRules()` in both `daily-scan` and `reanalyze-jobs`. Examples:
+- student: 5=student/intern, 4=entry/grad, 3=junior, 2=unspecified, 1=1-3yrs, 0=3+yrs/mid
+- junior: 5=1-3yr junior, 4=entry(over-qualified ok), 3=mid/junior-mid, 2=unspecified, 1=4-5yrs, 0=5+yrs
+- mid: 5=3-5yr mid, 4=junior-mid/"3+ yrs", 3=senior/"5-7yrs", 2=unspecified/over-qualified, 1=8+yrs, 0=student-only
+- senior: 5=senior/lead/6+yrs, 4=mid-senior/"5+yrs", 3=mid/"3-5yrs", 2=unspecified, 1=junior/entry, 0=student-only
+
+**Caps (all levels):** Location >40km → FACTOR 4=0 AND cap 7. Student/fresh_graduate: junior/entry-junior role → also cap 7.
 
 ### Priority Thresholds
 HIGH: 8-10 · MEDIUM: 5-7 · LOW: 2-4 · REJECTED: 0-1
@@ -288,3 +313,5 @@ return new Response(JSON.stringify({ error: "...", debugId }), { status: 500 });
 | `low_confidence` upsert crash | Column not in PostgREST schema cache | Upsert without column, separate tolerant update pass |
 | 0 jobs added every scan | `low_confidence` crash aborted upsert | Fixed by separating upsert payload from flag update |
 | Train AI button shown in Dashboard | Removed — redundant, cron handles it automatically | Deleted button + handler |
+| `update-job-statuses` auth error: "Could not resolve authentication method" | Used `ANTHROPIC_API_KEY` (not set); secret name is `CLAUDE_API_KEY` | Changed env var reference on line 51 |
+| Scoring hardcoded to student/Israel | `buildHardRejectionRules` had no FACTOR 2 guide for junior/mid; senior returned `""`; examples in scoring prompt hardcoded "student →" | Added `buildFactor2Examples(profile)` helper; full FACTOR 2 guides + location caps for all levels in both `daily-scan` and `reanalyze-jobs` |
