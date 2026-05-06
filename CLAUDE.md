@@ -28,11 +28,27 @@ When user says "Session Started":
 
 ## Critical Working Rules
 
-- **ALWAYS edit the active worktree**, not the main project dir. Dev server runs from worktree — edits to main won't show in browser.
-- Find active worktree: `lsof -i :8080 -sTCP:LISTEN | grep node` then `lsof -p <PID> | grep cwd`
+### Frontend / src changes (React, TypeScript, CSS)
+1. **Edit files in MAIN project dir** (`/Users/dorkochevsky/job-navigator/src/`)
+2. **Immediately rsync to running worktree** so browser reflects changes:
+   ```bash
+   # Find running worktree path first:
+   RUNNING_WT=$(lsof -i :8080 -sTCP:LISTEN | grep node | awk '{print $2}' | xargs -I{} lsof -p {} 2>/dev/null | grep cwd | awk '{print $NF}')
+   # Sync src:
+   rsync -a --delete /Users/dorkochevsky/job-navigator/src/ $RUNNING_WT/src/
+   ```
+3. **Commit + push from main dir**: `cd /Users/dorkochevsky/job-navigator && git add ... && git commit && git push origin main`
+
+**Why:** Editing main = single source of truth + always committed. Old strategy (edit worktree → rsync → commit main separately) was error-prone and left main stale.
+
+### Edge function changes
+- Always edit + deploy from MAIN dir (worktrees don't have supabase CLI context)
+- Deploy: `cd /Users/dorkochevsky/job-navigator && npx supabase functions deploy <name> --project-ref updzignrofsvyoceeddw`
+- Commit + push after deploy
+
+### General
 - Worktrees live at: `/Users/dorkochevsky/job-navigator/.claude/worktrees/<name>/`
-- Edge functions always deploy from MAIN project dir (not worktree): `cd /Users/dorkochevsky/job-navigator && npx supabase functions deploy <name> --project-ref updzignrofsvyoceeddw`
-- **Commit + push every change to GitHub**: `git add` relevant files → `git commit` → `git push origin main`
+- Find running worktree: `lsof -i :8080 -sTCP:LISTEN | grep node | awk '{print $2}' | xargs -I{} lsof -p {} 2>/dev/null | grep cwd | awk '{print $NF}'`
 - GitHub: `https://github.com/Kochevsky23/job-navigator.git`
 
 ---
@@ -45,7 +61,7 @@ When user says "Session Started":
 - **Deploy function**: `cd /Users/dorkochevsky/job-navigator && npx supabase functions deploy <name> --project-ref updzignrofsvyoceeddw`
 - **DB push**: `cd /Users/dorkochevsky/job-navigator && npx supabase db push --linked`
 - **Dev server**: `npm run dev` from worktree dir. HMR active — file saves update browser instantly.
-- **CRITICAL — always find the RUNNING worktree first**: `lsof -i :8080 -sTCP:LISTEN | grep node | awk '{print $2}' | xargs -I{} lsof -p {} 2>/dev/null | grep cwd | awk '{print $NF}'`. Edit files in THAT path. The session worktree (`clever-volhard-*`) may differ from the running one (`busy-hertz-*`). Sync with: `rsync -a --delete <session-wt>/src/ <running-wt>/src/`
+- **CRITICAL — edit main, rsync to running worktree**: Edit `src/` in `/Users/dorkochevsky/job-navigator/src/`, then rsync to running worktree so browser updates. See Critical Working Rules above.
 - **Memory files**: `/Users/dorkochevsky/.claude/projects/-Users-dorkochevsky-job-navigator/memory/`
 
 ### Env Vars (edge functions)
