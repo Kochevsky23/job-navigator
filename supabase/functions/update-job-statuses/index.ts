@@ -48,7 +48,7 @@ async function analyzeEmailsWithClaude(
   emails: EmailSummary[],
   jobs: { company: string; role: string; status: string }[]
 ): Promise<ClaudeMatch[]> {
-  const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
+  const anthropic = new Anthropic({ apiKey: Deno.env.get("CLAUDE_API_KEY")! });
 
   const companyList = jobs
     .map(j => `- "${j.company}" | role: ${j.role} | current status: ${j.status}`)
