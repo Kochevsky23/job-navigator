@@ -1,10 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,12 +22,12 @@ interface Finding {
 const STATIC_FINDINGS: Finding[] = [
   {
     id: "SEC-001",
-    severity: "MEDIUM",
+    severity: "LOW",
     category: "CORS",
-    area: "update-job-statuses, security-review, daily-scan, scheduled-scan",
-    issue: "Some edge functions still use Access-Control-Allow-Origin: * (wildcard CORS). User-facing generation functions (generate-cv, cover-letter, interview-prep, company-research) have been fixed to restrict to allowed origins.",
-    risk: "Functions still using wildcard CORS can be called cross-origin from any site. Lower risk now that the main data-access functions are restricted.",
-    recommendation: "Migrate remaining functions to use the shared getCorsHeaders() helper from _shared/cors.ts.",
+    area: "daily-scan, scheduled-scan (server-to-server only)",
+    issue: "✅ LARGELY RESOLVED — All user-facing edge functions (generate-cv, cover-letter, interview-prep, company-research, update-job-statuses, security-review) now restrict CORS to allowed origins via getCorsHeaders(). Remaining wildcard CORS is only on daily-scan and scheduled-scan which are called server-to-server (cron/service role), not from browsers.",
+    risk: "Low. Server-to-server functions with wildcard CORS are not exploitable via browser-based CSRF since they require a service role key or scheduled secret.",
+    recommendation: "No action needed for server-to-server functions. All browser-callable endpoints are now origin-restricted.",
     auto_fix_allowed: false,
     verified: false,
   },
@@ -310,6 +305,7 @@ async function runRuntimeChecks(supabase: ReturnType<typeof createClient>, userI
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
