@@ -68,6 +68,7 @@ When user says "Session Started":
 Auto-injected: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 In Supabase Secrets: `CLAUDE_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `SCHEDULED_SCAN_SECRET`
 ⚠️ Always use `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — `EXTERNAL_SUPABASE_URL` is NOT set.
+Optional enrichment keys (add to Supabase Secrets to enable): `EXA_API_KEY` (web search in company-research), `BRAVE_API_KEY` (salary benchmarking in company-research).
 
 ---
 
@@ -106,7 +107,7 @@ In Supabase Secrets: `CLAUDE_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET
 | `generate-cv` | ✅ | — | Tailored CV per job → `jobs.tailored_cv`. Rate limit: 10/hr. UUID-validates jobId. CV capped at 8K chars. |
 | `generate-cover-letter` | ✅ | — | Cover letter per job → `jobs.cover_letter`. Rate limit: 10/hr. |
 | `interview-prep` | ✅ | — | 10 Q&A pairs per job → `jobs.interview_prep`. Rate limit: 10/hr. |
-| `company-research` | ✅ | — | Company brief per job → `jobs.company_research`. Rate limit: 20/hr. |
+| `company-research` | ✅ | — | Company brief per job → `jobs.company_research`. Rate limit: 20/hr. Enriched with Exa web search + Brave salary data (both optional — skipped if keys absent). |
 | `update-job-statuses` | ✅ | Evening only | Gmail status change detection via Claude (claude-haiku-4-5). Uses `CLAUDE_API_KEY`. |
 | `ml-feedback` | ✅ | Daily cron | Re-score jobs using user star ratings as ground truth. Computes precision/recall/F1 metrics. Does NOT run inside daily-scan — separate cron. |
 | `security-review` | ✅ | Manual | Read-only security & privacy analysis. 12 static architectural checks + runtime DB checks. Returns structured findings JSON. |
@@ -335,3 +336,4 @@ return new Response(JSON.stringify({ error: "...", debugId }), { status: 500 });
 | scan_runs error_text leaks env var names (SEC-RT-004) | `error.message` stored raw — could contain `SUPABASE_URL`, key values | `sanitizeErrorText()` added to `daily-scan` — strips `[ENV]`/`[KEY]`/`[TOKEN]`/`[URL]` patterns before storing |
 | debug.ts missing sensitive keys (SEC-RT-001) | `google_refresh_token`, `client_secret`, `service_role_key` not in redaction list | Added 7 more keys to `SENSITIVE_KEYS` in `_shared/debug.ts` |
 | /debug shows all users' logs (SEC-009) | No `user_id` filter in query | Added `eq('user_id', user.id)` filter in `DebugDashboard.tsx` |
+| Company research based on Claude knowledge only | No real-time data | Exa Search (recent news) + Brave Search (salary data) added to `company-research`; both optional, graceful fallback |

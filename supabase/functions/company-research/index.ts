@@ -4,6 +4,85 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// ─── Exa Search ───────────────────────────────────────────────────────────────
+
+interface ExaResult {
+  title: string;
+  url: string;
+  publishedDate?: string;
+  highlights?: string[];
+}
+
+async function searchExa(company: string, domain: string): Promise<string> {
+  const apiKey = Deno.env.get("EXA_API_KEY");
+  if (!apiKey) return "";
+
+  const query = domain
+    ? `site:${domain} OR "${company}" company overview funding news`
+    : `"${company}" company overview funding recent news`;
+
+  try {
+    const resp = await fetch("https://api.exa.ai/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+      body: JSON.stringify({
+        query,
+        numResults: 4,
+        useAutoprompt: true,
+        type: "neural",
+        contents: { highlights: { numSentences: 2, highlightsPerUrl: 2 } },
+      }),
+    });
+    if (!resp.ok) return "";
+    const data = await resp.json();
+    const results: ExaResult[] = data.results ?? [];
+    if (!results.length) return "";
+
+    return results.map(r => {
+      const date = r.publishedDate ? ` (${r.publishedDate.slice(0, 10)})` : "";
+      const snippets = (r.highlights ?? []).join(" ");
+      return `- ${r.title}${date}\n  ${r.url}\n  ${snippets}`;
+    }).join("\n\n");
+  } catch {
+    return "";
+  }
+}
+
+// ─── Brave Search ─────────────────────────────────────────────────────────────
+
+async function searchBraveSalary(role: string, location: string): Promise<string> {
+  const apiKey = Deno.env.get("BRAVE_API_KEY");
+  if (!apiKey) return "";
+
+  const year = new Date().getFullYear();
+  const q = `"${role}" salary ${location || "Israel"} ${year}`;
+
+  try {
+    const resp = await fetch(
+      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(q)}&count=4&freshness=py`,
+      {
+        headers: {
+          "Accept": "application/json",
+          "Accept-Encoding": "gzip",
+          "X-Subscription-Token": apiKey,
+        },
+      }
+    );
+    if (!resp.ok) return "";
+    const data = await resp.json();
+    const results = data.web?.results ?? [];
+    if (!results.length) return "";
+
+    return results.map((r: any) =>
+      `- ${r.title}\n  ${r.url}\n  ${r.description ?? ""}`
+    ).join("\n\n");
+  } catch {
+    return "";
+  }
+}
+
+// ─── Main handler ─────────────────────────────────────────────────────────────
+
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -27,37 +106,58 @@ Deno.serve(async (req) => {
     const rl = await checkRateLimit(supabase, job.user_id, "company-research", 20);
     if (!rl.allowed) throw new Error(`Rate limit reached. Try again in ${Math.ceil((rl.retryAfterSeconds ?? 3600) / 60)} minutes.`);
 
-    const prompt = `You are a company research analyst. Based on what you know about this company and the job description context, generate a concise company brief for a job candidate preparing to apply.
+    // Fetch Exa + Brave in parallel — both optional, never block on failure
+    const [exaResults, braveResults] = await Promise.all([
+      searchExa(job.company, job.company_domain ?? ""),
+      searchBraveSalary(job.role, job.location ?? ""),
+    ]);
+
+    const webContext = exaResults
+      ? `\nRECENT WEB SEARCH RESULTS (Exa):\n${exaResults}\n`
+      : "";
+    const salaryContext = braveResults
+      ? `\nSALARY BENCHMARK DATA (Brave Search):\n${braveResults}\n`
+      : "";
+    const dataSourceNote = (exaResults || braveResults)
+      ? "Use the web search results and salary data above to make your brief more specific and up-to-date. Cite specific findings where relevant."
+      : "Base your brief on what you know about this company.";
+
+    const prompt = `You are a company research analyst. Generate a concise company brief for a job candidate preparing to apply.
 
 Company: ${job.company}
-Role being applied for: ${job.role}
+Role: ${job.role}
 Location: ${job.location}
 Company domain: ${job.company_domain || "unknown"}
 
 Job description context:
 ${job.description?.substring(0, 2000) || "Not available"}
+${webContext}${salaryContext}
+${dataSourceNote}
 
 Write a structured company brief covering:
 
 WHAT THEY DO
-2–3 sentences: core product/service, who their customers are, what market they operate in.
+2–3 sentences: core product/service, customers, market.
 
 SIZE & STAGE
-Estimated employee count range, funding stage (bootstrapped/seed/series A-D/public), and approximate founding year if known.
+Employee count range, funding stage, founding year.
 
 TECH & TOOLS
-Technologies and tools commonly used at this company (infer from the job description and what you know).
+Technologies and tools used (from job description + search results).
 
 CULTURE SIGNALS
-2–3 honest observations about what it's like to work there — based on the job description tone, company type, and what's publicly known. Include both positives and any realistic watch points.
+2–3 observations about what it's like to work there. Include watch points.
 
 WHY THIS ROLE MATTERS
-How the ${job.role} position fits into the company's structure and what impact it typically has.
+How ${job.role} fits into the company and what impact it has.
+
+SALARY RANGE
+Estimated salary range for this role and location based on available data. If search results contain salary figures, cite them. Otherwise estimate.
 
 SMART QUESTIONS TO RESEARCH BEFORE THE INTERVIEW
-2 specific things to look up or read before applying/interviewing (e.g. recent news, product launches, competitors).
+2 specific things to look up or read before applying.
 
-Be honest and specific. If you're uncertain about something, say so briefly rather than guessing. Plain text with section headers.`;
+Be specific. Cite findings from web results when available. Plain text with section headers.`;
 
     const claudeResp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -69,11 +169,11 @@ Be honest and specific. If you're uncertain about something, say so briefly rath
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
+        max_tokens: 1200,
         system: [
           {
             type: "text",
-            text: "You are a company research analyst who helps job candidates understand companies before applying. You give honest, practical, and specific company briefs based on what is publicly known.",
+            text: "You are a company research analyst who helps job candidates understand companies before applying. You give honest, practical, and specific company briefs. When web search results are provided, incorporate them for accuracy.",
             cache_control: { type: "ephemeral" },
           },
         ],
@@ -87,9 +187,13 @@ Be honest and specific. If you're uncertain about something, say so briefly rath
 
     await supabase.from("jobs").update({ company_research: companyResearch }).eq("id", jobId);
 
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        success: true,
+        enriched: { exa: !!exaResults, brave: !!braveResults },
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (error: any) {
     console.error("Company research error:", error);
     return new Response(JSON.stringify({ error: error.message || "Company research failed" }), {
