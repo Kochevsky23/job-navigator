@@ -36,12 +36,23 @@ interface ClaudeMatch {
   emailIndex: number;
   company: string;
   newStatus: 'Applied' | 'Interviewing' | 'Rejected' | 'Offer';
+  confidence: number;
+  reason: string;
+}
+
+interface PendingChange {
+  jobId: string;
+  company: string;
+  role: string;
+  oldStatus: string;
+  newStatus: string;
+  confidence: number;
   reason: string;
 }
 
 async function analyzeEmailsWithClaude(
   emails: EmailSummary[],
-  jobs: { company: string; role: string; status: string }[]
+  jobs: { id: string; company: string; role: string; status: string }[]
 ): Promise<ClaudeMatch[]> {
   const anthropic = new Anthropic({ apiKey: Deno.env.get("CLAUDE_API_KEY")! });
 
@@ -89,12 +100,21 @@ CRITICAL — rejection signals always win:
 - Greenhouse, Lever, Workday, SmartRecruiters, Taleo send BOTH rejections AND interview invites — do NOT infer "Interviewing" just because the email comes from one of these ATS platforms
 - Only classify as "Interviewing" when subject/snippet explicitly mentions: interview, screening call, schedule a call, next step, meet with us, calendly link, availability, "let's talk", "we'd like to speak" — AND there are no rejection keywords present
 
+CONFIDENCE SCORING — include a confidence value (0.0–1.0) per match:
+- 1.0: Explicit rejection/offer/interview keyword in subject, unambiguous
+- 0.9: Clear match with strong signal in snippet
+- 0.8: Good match, minor ambiguity (e.g. company inferred from ATS sender)
+- 0.7: Likely match but email is generic or sender indirect
+- 0.6: Plausible match, some ambiguity in company or status
+- Below 0.6: Do not include — too uncertain
+
 Return ONLY a valid JSON array, no explanation, no markdown:
 [
   {
     "emailIndex": 1,
     "company": "exact company name from the tracked list",
     "newStatus": "Applied" | "Interviewing" | "Rejected" | "Offer",
+    "confidence": 0.95,
     "reason": "one sentence explaining the match"
   }
 ]
@@ -110,7 +130,6 @@ If no emails match any tracked company, return: []`;
   const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '[]';
 
   try {
-    // Strip markdown code blocks if present
     const json = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
     return JSON.parse(json) as ClaudeMatch[];
   } catch {
@@ -167,10 +186,6 @@ Deno.serve(async (req) => {
     const refreshToken = profile?.google_refresh_token;
     if (!refreshToken) throw new Error("Gmail not connected.");
 
-    // Determine sync cutoff:
-    // - lookbackDays param (manual button) → always use N days ago
-    // - stored timestamp (cron) → incremental since last run
-    // - fallback → 7 days ago
     const nowSec = Math.floor(Date.now() / 1000);
     const sevenDaysAgoSec = nowSec - 7 * 24 * 60 * 60;
     let cutoffSec: number;
@@ -190,7 +205,6 @@ Deno.serve(async (req) => {
 
     const accessToken = await getAccessToken(refreshToken);
 
-    // Fetch all actionable jobs
     const { data: jobs, error: jobsError } = await supabase
       .from("jobs")
       .select("id, company, role, status, company_domain, alert_date")
@@ -207,21 +221,15 @@ Deno.serve(async (req) => {
 
     console.log(`[update-job-statuses] ${jobs.length} jobs to check`);
 
-    // ── Step 1: One broad Gmail search for all application-status emails ─────
     const broadQuery = [
-      // Application / status
       'subject:application', 'subject:"your application"', 'subject:"application status"',
       'subject:"thank you for applying"', 'subject:candidacy',
-      // Rejection
       'subject:rejected', 'subject:"not moving forward"', 'subject:"other candidates"',
       'subject:unfortunately', 'subject:"position filled"', 'subject:"not selected"',
-      // Interview / scheduling
       'subject:interview', 'subject:screening', 'subject:"phone call"', 'subject:"next step"',
       'subject:"let\'s talk"', 'subject:"schedule a call"', 'subject:calendly',
       'subject:greenhouse', 'subject:lever', 'subject:"final round"',
-      // Offer
       'subject:offer', 'subject:congratulations', 'subject:"employment offer"',
-      // Hebrew
       'subject:מועמד', 'subject:ראיון', 'subject:"הצעת עבודה"',
       'subject:"לא נוכל"', 'subject:"מצטערים"', 'subject:"לא עברת"',
       'subject:"שלב הבא"', 'subject:גיוס',
@@ -249,7 +257,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Step 2: Fetch metadata (subject + from + snippet) in parallel ─────────
     const metaResults = await Promise.all(
       emailIds.map(async ({ id }) => {
         try {
@@ -274,17 +281,18 @@ Deno.serve(async (req) => {
     const emails = metaResults.filter((e): e is EmailSummary => e !== null);
     console.log(`[update-job-statuses] Fetched metadata for ${emails.length} email(s)`);
 
-    // ── Step 3: Claude analyses all emails against all companies in one call ──
     const matches = await analyzeEmailsWithClaude(
       emails,
-      jobs.map(j => ({ company: j.company, role: j.role, status: j.status }))
+      jobs.map(j => ({ id: j.id, company: j.company, role: j.role, status: j.status }))
     );
 
     console.log(`[update-job-statuses] Claude identified ${matches.length} match(es)`);
 
-    // ── Step 4: Apply updates ─────────────────────────────────────────────────
+    // ── Step 4: Split high/low confidence, apply high-confidence immediately ──
+    const CONFIDENCE_THRESHOLD = 0.8;
     let statusesUpdated = 0;
     const updates: Array<{ company: string; role: string; oldStatus: string; newStatus: string }> = [];
+    const pendingChanges: PendingChange[] = [];
 
     const statusRank: Record<string, number> = { New: 0, Old: 0, Applied: 1, Interviewing: 2, Offer: 3, Rejected: 3 };
 
@@ -295,29 +303,42 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Never downgrade
       if ((statusRank[match.newStatus] ?? 0) <= (statusRank[job.status] ?? 0)) {
         console.log(`[${match.company}] Skipping — would downgrade ${job.status} → ${match.newStatus}`);
         continue;
       }
 
-      console.log(`[${match.company}] ${job.status} → ${match.newStatus} | ${match.reason}`);
+      const confidence = match.confidence ?? 1.0;
 
-      const updateData: Record<string, any> = { status: match.newStatus };
-      if (match.newStatus === 'Applied') updateData.applied_at = new Date().toISOString();
+      if (confidence >= CONFIDENCE_THRESHOLD) {
+        console.log(`[${match.company}] AUTO-APPLY (${confidence}) ${job.status} → ${match.newStatus} | ${match.reason}`);
 
-      const { error: updateError } = await supabase
-        .from("jobs").update(updateData).eq("id", job.id).eq("user_id", userId);
+        const updateData: Record<string, any> = { status: match.newStatus };
+        if (match.newStatus === 'Applied') updateData.applied_at = new Date().toISOString();
 
-      if (!updateError) {
-        statusesUpdated++;
-        updates.push({ company: job.company, role: job.role, oldStatus: job.status, newStatus: match.newStatus });
-        // Update local copy so duplicates in Claude response don't double-apply
-        job.status = match.newStatus;
+        const { error: updateError } = await supabase
+          .from("jobs").update(updateData).eq("id", job.id).eq("user_id", userId);
+
+        if (!updateError) {
+          statusesUpdated++;
+          updates.push({ company: job.company, role: job.role, oldStatus: job.status, newStatus: match.newStatus });
+          job.status = match.newStatus;
+        }
+      } else {
+        console.log(`[${match.company}] PENDING-REVIEW (${confidence}) ${job.status} → ${match.newStatus} | ${match.reason}`);
+        pendingChanges.push({
+          jobId: job.id,
+          company: job.company,
+          role: job.role,
+          oldStatus: job.status,
+          newStatus: match.newStatus,
+          confidence,
+          reason: match.reason,
+        });
       }
     }
 
-    // ── Step 5: Advance timestamp + save status changes for Pipeline ─────────
+    // ── Step 5: Save timestamp, auto-applied changes, and pending changes ─────
     const profileUpdate: Record<string, any> = { last_status_sync_timestamp: nowSec };
     if (updates.length > 0) {
       profileUpdate.last_status_changes = {
@@ -325,13 +346,30 @@ Deno.serve(async (req) => {
         changes: updates,
       };
     }
+    if (pendingChanges.length > 0) {
+      profileUpdate.pending_status_changes = {
+        generated_at: new Date().toISOString(),
+        changes: pendingChanges,
+      };
+    } else {
+      // Clear stale pending changes from previous runs
+      profileUpdate.pending_status_changes = null;
+    }
+
     await supabase.from("user_profiles")
       .update(profileUpdate)
       .eq("id", userId);
 
-    console.log(`[update-job-statuses] Done: ${statusesUpdated} updated. Timestamp → ${nowSec}`);
+    console.log(`[update-job-statuses] Done: ${statusesUpdated} auto-applied, ${pendingChanges.length} pending review.`);
     return new Response(
-      JSON.stringify({ success: true, jobsChecked: jobs.length, emailsFound: emails.length, statusesUpdated, updates }),
+      JSON.stringify({
+        success: true,
+        jobsChecked: jobs.length,
+        emailsFound: emails.length,
+        statusesUpdated,
+        updates,
+        pendingCount: pendingChanges.length,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

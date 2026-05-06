@@ -110,6 +110,20 @@ export async function runSecurityReview(save = false): Promise<{
   return data;
 }
 
+export async function exportToSheets(): Promise<{ success: boolean; url: string; jobCount: number }> {
+  const { data, error } = await supabase.functions.invoke('export-to-sheets');
+  if (error) {
+    let msg = error.message || 'Export failed';
+    try {
+      const body = await (error as any).context?.json?.();
+      if (body?.error) msg = body.error;
+    } catch {}
+    await debugLog({ severity: 'error', module: 'edge_function', message: `export-to-sheets failed: ${msg}`, error, functionName: 'exportToSheets', fileName: 'src/lib/api.ts' });
+    throw new Error(msg);
+  }
+  return data;
+}
+
 export async function fetchSkillsGap(): Promise<{
   gap_skills: { skill: string; frequency: number; priority: string; context: string; learn_tip: string }[];
   summary: string;

@@ -3,10 +3,11 @@ import { db } from '@/lib/supabase-external';
 import { Job, JobStatus } from '@/types/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, GripVertical, ArrowRight, RefreshCw } from 'lucide-react';
+import { Loader2, GripVertical, ArrowRight, RefreshCw, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import CompanyLogo from '@/components/CompanyLogo';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
+import { exportToSheets } from '@/lib/api';
 
 const COLUMNS: { id: JobStatus; label: string; borderColor: string }[] = [
   { id: 'New', label: 'New', borderColor: 'border-t-accent' },
@@ -45,6 +46,21 @@ interface LastStatusChanges {
   changes: StatusChange[];
 }
 
+interface PendingChange {
+  jobId: string;
+  company: string;
+  role: string;
+  oldStatus: string;
+  newStatus: string;
+  confidence: number;
+  reason: string;
+}
+
+interface PendingStatusChanges {
+  generated_at: string;
+  changes: PendingChange[];
+}
+
 const statusColor: Record<string, string> = {
   Applied: 'text-[hsl(var(--info))]',
   Interviewing: 'text-[hsl(var(--warning))]',
@@ -58,15 +74,20 @@ export default function Pipeline() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusChanges, setStatusChanges] = useState<LastStatusChanges | null>(null);
+  const [pendingChanges, setPendingChanges] = useState<PendingStatusChanges | null>(null);
+  const [exportingSheets, setExportingSheets] = useState(false);
 
   const fetchJobs = async () => {
     const [jobsRes, profileRes] = await Promise.all([
       db.from('jobs').select('*').neq('status', 'Archive').order('score', { ascending: false }),
-      db.from('user_profiles').select('last_status_changes').single(),
+      db.from('user_profiles').select('last_status_changes, pending_status_changes').single(),
     ]);
     if (jobsRes.data) setJobs(jobsRes.data as unknown as Job[]);
     if ((profileRes.data as any)?.last_status_changes) {
       setStatusChanges((profileRes.data as any).last_status_changes as LastStatusChanges);
+    }
+    if ((profileRes.data as any)?.pending_status_changes) {
+      setPendingChanges((profileRes.data as any).pending_status_changes as PendingStatusChanges);
     }
     setLoading(false);
   };
@@ -92,6 +113,57 @@ export default function Pipeline() {
     }
   };
 
+  const handleApprovePending = async (change: PendingChange) => {
+    const updateData: Record<string, any> = { status: change.newStatus };
+    if (change.newStatus === 'Applied') updateData.applied_at = new Date().toISOString();
+
+    const { error } = await db.from('jobs').update(updateData).eq('id', change.jobId);
+    if (error) {
+      toast.error(`Failed to apply ${change.company} → ${change.newStatus}`);
+      return;
+    }
+
+    // Remove from pending list
+    const remaining = (pendingChanges?.changes || []).filter(c => c.jobId !== change.jobId);
+    const newPending = remaining.length > 0
+      ? { ...pendingChanges!, changes: remaining }
+      : null;
+
+    await db.from('user_profiles').update({ pending_status_changes: newPending }).eq('id', (await db.auth.getUser()).data.user!.id);
+
+    setPendingChanges(newPending);
+    setJobs(prev => prev.map(j => j.id === change.jobId ? { ...j, status: change.newStatus as JobStatus } : j));
+    toast.success(`${change.company}: ${change.oldStatus} → ${change.newStatus}`);
+  };
+
+  const handleDismissPending = async (change: PendingChange) => {
+    const remaining = (pendingChanges?.changes || []).filter(c => c.jobId !== change.jobId);
+    const newPending = remaining.length > 0
+      ? { ...pendingChanges!, changes: remaining }
+      : null;
+
+    await db.from('user_profiles').update({ pending_status_changes: newPending }).eq('id', (await db.auth.getUser()).data.user!.id);
+    setPendingChanges(newPending);
+    toast.info(`Dismissed ${change.company} status change`);
+  };
+
+  const handleExportSheets = async () => {
+    setExportingSheets(true);
+    try {
+      const result = await exportToSheets();
+      toast.success(`Exported ${result.jobCount} jobs to Google Sheets`);
+      window.open(result.url, '_blank');
+    } catch (err: any) {
+      if (err.message === 'REAUTH_REQUIRED') {
+        toast.error('Reconnect Gmail in Settings to grant Sheets access');
+      } else {
+        toast.error(`Export failed: ${err.message}`);
+      }
+    } finally {
+      setExportingSheets(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -102,7 +174,68 @@ export default function Pipeline() {
 
   return (
     <div className="container py-8 space-y-5">
-      <h1 className="text-2xl font-display font-bold animate-fade-up">Pipeline</h1>
+      <div className="flex items-center justify-between animate-fade-up">
+        <h1 className="text-2xl font-display font-bold">Pipeline</h1>
+        <button
+          onClick={handleExportSheets}
+          disabled={exportingSheets}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border border-[hsl(var(--glass-border)/0.4)] bg-[hsl(var(--card))] hover:bg-[hsl(var(--glass-border)/0.15)] transition-colors disabled:opacity-50"
+        >
+          {exportingSheets
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <FileSpreadsheet className="h-4 w-4 text-green-500" />}
+          Export to Sheets
+        </button>
+      </div>
+
+      {/* Pending Status Changes — requires user confirmation */}
+      {pendingChanges && pendingChanges.changes.length > 0 && (
+        <div className="glass-card rounded-xl p-4 space-y-3 animate-fade-up border border-[hsl(var(--warning)/0.4)]">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-[hsl(var(--warning))]" />
+            <span className="text-sm font-semibold">Pending Review</span>
+            <span className="text-xs text-muted-foreground">— low confidence, confirm before applying</span>
+            <span className="text-xs text-muted-foreground ml-auto">
+              {pendingChanges.changes.length} change{pendingChanges.changes.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {pendingChanges.changes.map((c, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm bg-[hsl(var(--warning)/0.05)] rounded-lg p-2.5">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium truncate max-w-[120px]">{c.company}</span>
+                    <span className="text-muted-foreground truncate max-w-[160px]">{c.role}</span>
+                    <div className="flex items-center gap-1 ml-auto shrink-0">
+                      <span className={`text-xs font-medium ${statusColor[c.oldStatus] || 'text-muted-foreground'}`}>{c.oldStatus}</span>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                      <span className={`text-xs font-medium ${statusColor[c.newStatus] || 'text-muted-foreground'}`}>{c.newStatus}</span>
+                      <span className="text-[10px] text-muted-foreground ml-1">({Math.round(c.confidence * 100)}%)</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{c.reason}</p>
+                </div>
+                <div className="flex gap-1 shrink-0 mt-0.5">
+                  <button
+                    onClick={() => handleApprovePending(c)}
+                    className="p-1 rounded hover:bg-[hsl(var(--success)/0.15)] transition-colors"
+                    title="Approve"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
+                  </button>
+                  <button
+                    onClick={() => handleDismissPending(c)}
+                    className="p-1 rounded hover:bg-destructive/10 transition-colors"
+                    title="Dismiss"
+                  >
+                    <XCircle className="h-4 w-4 text-destructive" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recent Status Changes */}
       <div className="glass-card rounded-xl p-4 space-y-3 animate-fade-up border border-[hsl(var(--glass-border)/0.3)]">

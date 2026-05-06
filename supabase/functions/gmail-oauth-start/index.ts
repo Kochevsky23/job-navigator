@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     response_type: "code",
     scope: [
       "https://www.googleapis.com/auth/gmail.readonly",
-      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/spreadsheets",
     ].join(" "),
     access_type: "offline",
     prompt: "consent", // Always re-prompt so we always get a refresh_token
