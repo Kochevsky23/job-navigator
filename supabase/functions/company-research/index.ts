@@ -47,34 +47,35 @@ async function searchExa(company: string, domain: string): Promise<string> {
   }
 }
 
-// ─── Brave Search ─────────────────────────────────────────────────────────────
+// ─── Exa Salary Search ────────────────────────────────────────────────────────
 
-async function searchBraveSalary(role: string, location: string): Promise<string> {
-  const apiKey = Deno.env.get("BRAVE_API_KEY");
+async function searchExaSalary(role: string, location: string): Promise<string> {
+  const apiKey = Deno.env.get("EXA_API_KEY");
   if (!apiKey) return "";
 
   const year = new Date().getFullYear();
-  const q = `"${role}" salary ${location || "Israel"} ${year}`;
+  const query = `${role} salary range ${location || "Israel"} ${year}`;
 
   try {
-    const resp = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(q)}&count=4&freshness=py`,
-      {
-        headers: {
-          "Accept": "application/json",
-          "Accept-Encoding": "gzip",
-          "X-Subscription-Token": apiKey,
-        },
-      }
-    );
+    const resp = await fetch("https://api.exa.ai/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+      body: JSON.stringify({
+        query,
+        num_results: 3,
+        type: "auto",
+        contents: { highlights: true },
+      }),
+    });
     if (!resp.ok) return "";
     const data = await resp.json();
-    const results = data.web?.results ?? [];
+    const results: ExaResult[] = data.results ?? [];
     if (!results.length) return "";
 
-    return results.map((r: any) =>
-      `- ${r.title}\n  ${r.url}\n  ${r.description ?? ""}`
-    ).join("\n\n");
+    return results.map(r => {
+      const snippets = (r.highlights ?? []).join(" ");
+      return `- ${r.title}\n  ${r.url}\n  ${snippets}`;
+    }).join("\n\n");
   } catch {
     return "";
   }
@@ -106,18 +107,18 @@ Deno.serve(async (req) => {
     if (!rl.allowed) throw new Error(`Rate limit reached. Try again in ${Math.ceil((rl.retryAfterSeconds ?? 3600) / 60)} minutes.`);
 
     // Fetch Exa + Brave in parallel — both optional, never block on failure
-    const [exaResults, braveResults] = await Promise.all([
+    const [exaResults, salaryResults] = await Promise.all([
       searchExa(job.company, job.company_domain ?? ""),
-      searchBraveSalary(job.role, job.location ?? ""),
+      searchExaSalary(job.role, job.location ?? ""),
     ]);
 
     const webContext = exaResults
       ? `\nRECENT WEB SEARCH RESULTS (Exa):\n${exaResults}\n`
       : "";
-    const salaryContext = braveResults
-      ? `\nSALARY BENCHMARK DATA (Brave Search):\n${braveResults}\n`
+    const salaryContext = salaryResults
+      ? `\nSALARY BENCHMARK DATA (Exa):\n${salaryResults}\n`
       : "";
-    const dataSourceNote = (exaResults || braveResults)
+    const dataSourceNote = (exaResults || salaryResults)
       ? "Use the web search results and salary data above to make your brief more specific and up-to-date. Cite specific findings where relevant."
       : "Base your brief on what you know about this company.";
 
@@ -189,7 +190,7 @@ Be specific. Cite findings from web results when available. Plain text with sect
     return new Response(
       JSON.stringify({
         success: true,
-        enriched: { exa: !!exaResults, brave: !!braveResults },
+        enriched: { exa: !!exaResults, salary: !!salaryResults },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
