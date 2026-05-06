@@ -15,6 +15,9 @@ export type DebugModule =
 const SENSITIVE_KEYS = new Set([
   "api_key", "apikey", "refresh_token", "access_token", "token",
   "secret", "password", "cv_text", "email_body", "body",
+  "google_refresh_token", "google_access_token", "client_secret",
+  "service_role_key", "anon_key", "authorization", "private_key",
+  "email_body_raw", "email_text", "email_html",
 ]);
 
 const FIX_MAP: Array<[RegExp, string]> = [

@@ -331,3 +331,7 @@ return new Response(JSON.stringify({ error: "...", debugId }), { status: 500 });
 | Train AI button shown in Dashboard | Removed — redundant, cron handles it automatically | Deleted button + handler |
 | `update-job-statuses` auth error: "Could not resolve authentication method" | Used `ANTHROPIC_API_KEY` (not set); secret name is `CLAUDE_API_KEY` | Changed env var reference on line 51 |
 | Scoring hardcoded to student/Israel | `buildHardRejectionRules` had no FACTOR 2 guide for junior/mid; senior returned `""`; examples in scoring prompt hardcoded "student →" | Added `buildFactor2Examples(profile)` helper; full FACTOR 2 guides + location caps for all levels in both `daily-scan` and `reanalyze-jobs` |
+| CORS wildcard `*` on gen functions (SEC-001) | All functions used `Access-Control-Allow-Origin: *` | New `_shared/cors.ts` — `getCorsHeaders(req)` restricts to `job-navigator.vercel.app` + localhost. Applied to all 4 gen functions. |
+| scan_runs error_text leaks env var names (SEC-RT-004) | `error.message` stored raw — could contain `SUPABASE_URL`, key values | `sanitizeErrorText()` added to `daily-scan` — strips `[ENV]`/`[KEY]`/`[TOKEN]`/`[URL]` patterns before storing |
+| debug.ts missing sensitive keys (SEC-RT-001) | `google_refresh_token`, `client_secret`, `service_role_key` not in redaction list | Added 7 more keys to `SENSITIVE_KEYS` in `_shared/debug.ts` |
+| /debug shows all users' logs (SEC-009) | No `user_id` filter in query | Added `eq('user_id', user.id)` filter in `DebugDashboard.tsx` |

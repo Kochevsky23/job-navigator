@@ -138,12 +138,14 @@ export default function DebugDashboard() {
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
     let query = supabase
       .from('debug_logs')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(200);
 
+    if (user) query = query.eq('user_id', user.id);
     if (severityFilter !== 'all') query = query.eq('severity', severityFilter);
     if (moduleFilter !== 'all')   query = query.eq('module', moduleFilter);
 

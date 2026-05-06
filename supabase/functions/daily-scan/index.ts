@@ -8,6 +8,20 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Strip env var names, key patterns, and internal URLs from error text before storing
+function sanitizeErrorText(msg: string): string {
+  return msg
+    .replace(/SUPABASE[_A-Z]*/g, "[ENV]")
+    .replace(/CLAUDE[_A-Z]*/g, "[ENV]")
+    .replace(/GOOGLE[_A-Z]*/g, "[ENV]")
+    .replace(/RESEND[_A-Z]*/g, "[ENV]")
+    .replace(/sk-[A-Za-z0-9-_]{10,}/g, "[KEY]")
+    .replace(/Bearer [A-Za-z0-9._-]{20,}/g, "Bearer [TOKEN]")
+    .replace(/https?:\/\/[^\s"']+/g, (url) => {
+      try { return new URL(url).origin + "/[path]"; } catch { return "[URL]"; }
+    });
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CandidateProfile {
@@ -1233,7 +1247,7 @@ Deno.serve(async (req) => {
       success: false,
       jobs_found: jobsFound,
       jobs_added: jobsAdded,
-      error_text: error.message || "Unknown error",
+      error_text: sanitizeErrorText(error.message || "Unknown error"),
     });
     return new Response(
       JSON.stringify({ error: error.message || "Scan failed", debugId }),
