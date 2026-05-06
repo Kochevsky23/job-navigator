@@ -1210,10 +1210,11 @@ Deno.serve(async (req) => {
       console.log(`[7] Upserted: ${jobsAdded} new, ${rowsToUpsert.length - jobsAdded} duplicates skipped`);
       // Mark email-context jobs as low_confidence in a separate pass (tolerates schema cache lag)
       if (lowConfidenceFingerprints.length > 0) {
-        await supabase.from("jobs")
-          .update({ low_confidence: true })
-          .in("fingerprint", lowConfidenceFingerprints)
-          .catch(() => { /* non-critical — column may not be in schema cache yet */ });
+        try {
+          await supabase.from("jobs")
+            .update({ low_confidence: true })
+            .in("fingerprint", lowConfidenceFingerprints);
+        } catch { /* non-critical — column may not be in schema cache yet */ }
       }
     }
 
