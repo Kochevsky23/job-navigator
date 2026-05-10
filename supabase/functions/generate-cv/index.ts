@@ -13,49 +13,75 @@ body {
   line-height: 1.4;
   color: #000;
   background: white;
-  padding: 0.7in 0.8in;
-  max-width: 8.27in;
+  padding: 0;
+  margin: 0;
+}
+.cv-wrapper {
+  border: 1px solid #000;
+  padding: 0.5in 0.6in;
+  min-height: 9.5in;
+  max-width: 7.5in;
   margin: 0 auto;
+  background: white;
 }
 .cv-name {
   text-align: center;
-  font-size: 20pt;
+  font-size: 18pt;
   font-weight: bold;
   margin-bottom: 3px;
+  letter-spacing: 0.02em;
 }
 .cv-contact {
   text-align: center;
   font-size: 10pt;
-  margin-bottom: 8px;
+  font-weight: bold;
+  margin-bottom: 2px;
 }
-.cv-contact a { color: #000; text-decoration: none; }
+.cv-contact a { color: #000; text-decoration: underline; }
+.cv-subtitle {
+  text-align: center;
+  font-size: 10.5pt;
+  font-weight: normal;
+  margin-bottom: 6px;
+}
 .section-bar {
-  background: #e0e0e0;
+  background: #d9d9d9;
   text-align: center;
   padding: 1px 0;
-  margin: 10px 0 5px 0;
+  margin: 8px 0 4px 0;
 }
 .section-bar span {
   text-decoration: underline;
   font-size: 11pt;
+  font-weight: normal;
 }
 .entry-header {
   font-weight: bold;
   margin-bottom: 2px;
+  margin-top: 3px;
 }
-p { margin-bottom: 4px; }
+p { margin-bottom: 3px; }
 ul {
-  margin-left: 20px;
-  margin-bottom: 5px;
+  margin-left: 18px;
+  margin-bottom: 4px;
+  list-style-type: disc;
 }
 ul li { margin-bottom: 1px; }
 .skills-category { font-weight: bold; }
 @media print {
   * { box-sizing: border-box; }
-  body { padding: 0.5in; margin: 0; }
-  @page { size: A4; margin: 0; }
+  body { padding: 0; margin: 0; }
+  @page { size: A4; margin: 0.3in; }
+  .cv-wrapper {
+    border: 1px solid #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    min-height: auto;
+    margin: 0;
+    padding: 0.4in 0.5in;
+  }
   .section-bar {
-    background: #e0e0e0 !important;
+    background: #d9d9d9 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -63,50 +89,61 @@ ul li { margin-bottom: 1px; }
 `;
 
 const STRUCTURE_EXAMPLE = `
+<div class="cv-wrapper">
 <div class="cv-name">Full Name</div>
-<div class="cv-contact">Phone | City, Country | email@example.com | LinkedIn</div>
+<div class="cv-contact"><strong>+Phone | City, Country | <a href="mailto:email@example.com">email@example.com</a> | <a href="#">LinkedIn</a></strong></div>
+<div class="cv-subtitle">Role Title | Domain | Orientation</div>
 
 <div class="section-bar"><span>Profile</span></div>
-<p>Opening profile sentence bold and strong.</p>
-<p>Second sentence with skills and impact.</p>
-<p>Third sentence with collaboration/ownership.</p>
+<p><strong>Bold opening sentence tying candidate background directly to this job title and key requirements.</strong></p>
+<p>Second sentence highlighting specific experience, tools, or methodologies relevant to the role.</p>
+<p>Third sentence on approach, collaboration style, or career goal aligned to company context.</p>
 
 <div class="section-bar"><span>Education</span></div>
-<div class="entry-header">"Institution Name" | Expected graduation: YEAR</div>
-<p>Degree and field of study.</p>
-<p>GPA: XX | Brief academic note.</p>
-<p>Relevant coursework: Course1, Course2, Course3.</p>
-<div class="entry-header">"School Name" | YEAR–YEAR</div>
-<p>Brief description of high school achievement.</p>
+<div class="entry-header">"Institution Name" | expected graduation: YEAR</div>
+<p>B.Sc. Degree Field (Expected YEAR) | GPA: XX</p>
+<p>Relevant Coursework: Course1, Course2, Course3</p>
 
 <div class="section-bar"><span>Work Experience</span></div>
-<div class="entry-header">Job Title | Company Name | YEAR-YEAR</div>
+<div class="entry-header">Job Title |Company Name| YEAR-YEAR</div>
 <ul>
-  <li>Bullet one with strong action verb and measurable result.</li>
-  <li>Bullet two focusing on relevant skills.</li>
-  <li>Bullet three with context/environment.</li>
+  <li>Strong action verb + what you did + measurable result.</li>
+  <li>Bullet focused on skill/tool directly matching the job.</li>
+  <li>Bullet showing collaboration, ownership, or environment context.</li>
+  <li>Bullet on documentation, process, or improvement.</li>
+  <li>Bullet on cross-functional or team impact.</li>
 </ul>
 
 <div class="section-bar"><span>Projects</span></div>
-<div class="entry-header">Project Name – Brief Tagline | Personal Project</div>
+<div class="entry-header">Project Name – Brief Tagline</div>
 <ul>
-  <li>Tech-focused bullet with specific tools mentioned.</li>
-  <li>Impact or result bullet.</li>
-  <li>Architecture or system design bullet.</li>
+  <li>What you built and why — framed for this job's domain.</li>
+  <li>Specific technology or tool that matches job requirements.</li>
+  <li>Quantified impact or result.</li>
+  <li>System design, architecture, or data infrastructure detail.</li>
+  <li>Ownership or lifecycle bullet.</li>
+  <li>Security, reliability, or scale detail if relevant.</li>
+  <li>Any automation or ML component.</li>
 </ul>
 
 <div class="section-bar"><span>Military Experience</span></div>
-<div class="entry-header">Role | Unit | YEAR-YEAR</div>
+<div class="entry-header">Role, Unit | YEAR-YEAR</div>
 <ul>
-  <li>Leadership bullet.</li>
-  <li>Responsibility bullet transferable to professional environment.</li>
+  <li>Leadership or ownership bullet.</li>
+  <li>Precision, pressure, or data-accuracy bullet transferable to professional setting.</li>
+  <li>Analytical or technical skill developed.</li>
 </ul>
 
 <div class="section-bar"><span>Skills</span></div>
-<p><span class="skills-category">Personal Skills:</span> Skill1, Skill2, Skill3.</p>
-<p><span class="skills-category">Technical Skills:</span> Tech1, Tech2, Tech3.</p>
-<p><span class="skills-category">AI Development:</span> Tool1, Tool2.</p>
-<p><span class="skills-category">Languages:</span> Language1 (level), Language2 (level).</p>
+<p><span class="skills-category">Programming:</span> Python, SQL, TypeScript.</p>
+<p><span class="skills-category">Data &amp; BI:</span> Power BI, Excel (Advanced).</p>
+<p><span class="skills-category">Backend &amp; APIs:</span> REST APIs, Supabase, PostgreSQL.</p>
+<p><span class="skills-category">Frontend:</span> React.</p>
+<p><span class="skills-category">AI &amp; Automation:</span> Claude API, Prompt Engineering.</p>
+
+<div class="section-bar"><span>Additional</span></div>
+<p><span class="skills-category">Languages:</span> Hebrew (Native), English (High level).</p>
+</div>
 `;
 
 Deno.serve(async (req) => {
@@ -154,9 +191,10 @@ Deno.serve(async (req) => {
     const systemPrompt = `You are an expert resume writer specializing in tech industry ATS optimization.
 You generate tailored HTML resumes that exactly follow the visual structure shown to you.
 Output ONLY the inner HTML body content — no DOCTYPE, no <html>, no <head>, no <body> tags, no CSS.
-Use only these CSS classes: cv-name, cv-contact, section-bar, entry-header, skills-category.
-Use only these HTML tags: div, p, ul, li, span, a.
-Preserve ALL real dates, names, and metrics. Never invent experience. Mirror exact terminology from the job description.`;
+Use only these CSS classes: cv-wrapper, cv-name, cv-contact, cv-subtitle, section-bar, entry-header, skills-category.
+Use only these HTML tags: div, p, ul, li, span, a, strong.
+Preserve ALL real dates, names, and metrics. Never invent experience. Mirror exact terminology from the job description.
+ALWAYS wrap everything in <div class="cv-wrapper">...</div>.`;
 
     const userPrompt = `TARGET JOB:
 Company: ${job.company}
@@ -178,16 +216,18 @@ ${cvText.substring(0, CV_MAX_CHARS)}
 
 TAILORING RULES:
 1. KEYWORDS: Extract exact tech terms from job description. Mirror their language precisely.
-2. PROFILE: 3-4 lines. Open with the exact job title or close variant. Mention 2-3 specific technologies from the job description.
-3. SKILLS: Reorder so job-matching skills appear first. Include every matching tech the candidate has.
-4. EXPERIENCE: Rewrite bullets to foreground relevance. Strong action verbs. Preserve all real metrics.
-5. PROJECTS: Emphasize tech that matches the job. Use the exact technology names from the job description.
-6. PRESERVE: All dates, employer names, job titles, school names, GPA, real achievements.
+2. SUBTITLE: Generate a 3-part tagline matching the job. E.g. "Data Analyst | AI Applications | Product-Oriented". Keep concise.
+3. PROFILE: 3 lines. First line bold (<strong>). Open with the exact job title or close variant. Mention 2-3 specific technologies from the job description.
+4. SKILLS: Group exactly as in the template (Programming / Data & BI / Backend & APIs / Frontend / AI & Automation). Reorder items within each group so job-matching skills appear first.
+5. EXPERIENCE: Rewrite bullets to foreground relevance. Strong action verbs. Preserve all real metrics.
+6. PROJECTS: Emphasize tech that matches the job. Use the exact technology names from the job description.
+7. PRESERVE: All dates, employer names, job titles, school names, GPA, real achievements.
+8. STRUCTURE: Always wrap everything in <div class="cv-wrapper">. Include the Additional section with Languages at the bottom.
 
 HTML STRUCTURE TO FOLLOW EXACTLY:
 ${STRUCTURE_EXAMPLE}
 
-Return ONLY the inner HTML body content following the structure above. No preamble, no explanation, no markdown fencing, no CSS, no DOCTYPE.`;
+Return ONLY the HTML content starting with <div class="cv-wrapper"> and ending with </div>. No preamble, no explanation, no markdown fencing, no CSS, no DOCTYPE.`;
 
     const claudeResp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

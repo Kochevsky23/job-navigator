@@ -396,20 +396,11 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
                       onClick={() => {
                         const w = window.open('', '_blank');
                         if (!w) return;
-                        const lines = displayJob.tailored_cv!.split('\n');
-                        const html = lines.map(line => {
-                          const escaped = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                          if (!escaped.trim()) return '<br/>';
-                          if (/^[A-Z][A-Z\s]{3,}$/.test(escaped.trim())) return `<h2>${escaped}</h2>`;
-                          if (escaped.trim().startsWith('•') || escaped.trim().startsWith('-')) return `<li>${escaped.replace(/^[•\-]\s*/,'')}</li>`;
-                          return `<p>${escaped}</p>`;
-                        }).join('');
-                        w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>CV – ${job.company}</title><style>
-                          body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:0 32px;color:#111;font-size:13px;line-height:1.6}
-                          h1{font-size:22px;margin:0 0 4px}h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;border-bottom:1px solid #aaa;margin:18px 0 6px;padding-bottom:3px}
-                          p{margin:2px 0}li{margin:1px 0 1px 16px}br{display:block;margin:4px 0}
-                          @media print{body{margin:0;padding:24px}}
-                        </style></head><body>${html}<script>window.onload=()=>{window.print();}</script></body></html>`);
+                        const htmlWithPrint = displayJob.tailored_cv!.replace(
+                          '</body>',
+                          '<script>window.onload=function(){window.print();}<\/script></body>'
+                        );
+                        w.document.write(htmlWithPrint);
                         w.document.close();
                       }}
                       className="flex items-center gap-1 text-xs text-primary hover:bg-primary/10 px-2 py-1 rounded-lg transition-colors"
