@@ -91,7 +91,7 @@ ul li { margin-bottom: 0px; }
 const STRUCTURE_EXAMPLE = `
 <div class="cv-wrapper">
 <div class="cv-name">Full Name</div>
-<div class="cv-contact"><strong>+Phone | City, Country | <a href="mailto:email@example.com">email@example.com</a> | <a href="#">LinkedIn</a></strong></div>
+<div class="cv-contact"><strong>+Phone | City, Country | <a href="mailto:email@example.com">email@example.com</a> | <a href="LINKEDIN_URL_FROM_CONTEXT">LinkedIn</a></strong></div>
 <div class="cv-subtitle">Role Title | Domain | Orientation</div>
 
 <div class="section-bar"><span>Profile</span></div>
@@ -179,6 +179,9 @@ Deno.serve(async (req) => {
     const cvText = profile?.cv_text?.trim();
     if (!cvText) throw new Error("No CV found. Please upload your CV in Settings first.");
 
+    const linkedinMatch = cvText.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9\-_%]+\/?/i);
+    const linkedinUrl = linkedinMatch?.[0] ?? "";
+
     const cp = profile?.candidate_profile || {};
     const candidateContext = [
       cp.education_field && `Education: ${cp.education_field}`,
@@ -186,6 +189,7 @@ Deno.serve(async (req) => {
       cp.skills?.length && `Skills: ${cp.skills.join(", ")}`,
       cp.years_of_experience && `Experience level: ${cp.years_of_experience}`,
       cp.city && `City: ${cp.city}`,
+      linkedinUrl && `LinkedIn URL: ${linkedinUrl}`,
     ].filter(Boolean).join("\n");
 
     const systemPrompt = `You are an expert resume writer specializing in tech industry ATS optimization.
@@ -215,6 +219,8 @@ FULL CV (source of truth for all facts):
 ${cvText.substring(0, CV_MAX_CHARS)}
 
 TAILORING RULES:
+0. CONTACT LINE: In the cv-contact div, use the exact LinkedIn URL from candidate context for the LinkedIn href. If LinkedIn URL is provided in context, use it exactly — do not use "#" as placeholder.
+
 1. KEYWORDS: Extract exact phrases from the job description. Mirror their language precisely — if JD says "reconcile discrepancies", use that exact phrase.
 
 2. SUBTITLE: 3-part tagline matching the role. Max 8 words total. E.g. "Finance Operations | Data Entry & Accuracy | Process Improvement".
