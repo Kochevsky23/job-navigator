@@ -219,31 +219,33 @@ TAILORING RULES:
 
 2. SUBTITLE: 3-part tagline matching the role. Max 8 words total. E.g. "Finance Operations | Data Entry & Accuracy | Process Improvement".
 
-3. PROFILE: Exactly 3 sentences. Each sentence MUST fit on ONE line (max 90 chars). First sentence bold (<strong>). Rules:
-   - Sentence 1: exact job title + candidate's most relevant background. NEVER say "finance data" if candidate didn't work in finance — say "production data" or "data analytics".
-   - Sentence 2: 2-3 specific hard skills from job requirements + one proof point.
-   - Sentence 3: MUST name the company (${job.company}) + their domain (e.g. venture capital, fintech, etc.) + candidate's value-add.
+3. PROFILE: Exactly 3 sentences. WORD LIMIT: max 13 words per sentence. First sentence bold (<strong>). Rules:
+   - Sentence 1: exact job title + candidate's most relevant background. NEVER say "finance data" if candidate didn't work in finance — say "production data" or "data analytics". Count: must be ≤13 words.
+   - Sentence 2: 2-3 specific hard skills from job requirements + one proof point. Count: must be ≤13 words.
+   - Sentence 3: MUST name the company (${job.company}) + their domain (e.g. venture capital, fintech) + value-add. Count: must be ≤13 words.
 
-4. SKILLS: Group exactly as in the template. Within each group, put most JD-relevant skills first. If JD mentions Excel with specific techniques (formulas, lookups, filtering, data validation) — include ALL of them verbatim.
+4. SKILLS: Use EXACTLY these 5 category names — no renaming, no adding categories:
+   - Programming: [languages only]
+   - Data & BI: [Excel with JD techniques if mentioned: Formulas, Lookups, Filtering, Data Validation; BI tools]
+   - Backend & APIs: [databases, APIs, backend tools]
+   - Frontend: [frameworks]
+   - AI & Automation: [AI tools, automation]
+   Do NOT add Git, Version Control, or any 6th category. Reorder items most JD-relevant first.
 
-5. EXPERIENCE: Max 5 bullets. Each bullet MUST fit on one line — hard limit 90 characters. Rules:
-   - Every bullet = Action verb + what you did + result/outcome/metric.
-   - REQUIRED: Include one bullet explicitly about investigating or tracing data discrepancies to root cause.
-   - Use exact JD language: "reconcile", "data completeness", "consistency", "reliability", "cross-functional".
-   - Bullet with no outcome = rejected. Add: "reducing X", "improving Y", "ensuring Z".
+5. EXPERIENCE: Max 5 bullets. WORD LIMIT: max 13 words per bullet. Rules:
+   - Every bullet = Action verb + what + result/metric. Good example: "Maintained SQL pipelines, reducing errors and improving reporting accuracy." (10 words ✓)
+   - Bad example: "Maintained and improved SQL data pipelines, ensuring data completeness and reliability for product teams." (15 words ✗ — too long, cut it)
+   - REQUIRED: Every core responsibility listed in the job description must map to at least one bullet across Work Experience or Projects.
+   - Mirror the exact action verbs and nouns from the JD responsibilities section.
+   - Count your words before writing each bullet. If >13 → rewrite shorter.
 
-6. PROJECTS: Max 6 bullets. Each bullet MUST fit on one line — hard limit 90 characters. Every bullet must show a result, metric, or system property. Emphasize data integrity, automation, and back-office relevance over frontend/UI.
+6. PROJECTS: Max 6 bullets. WORD LIMIT: max 13 words per bullet. Every bullet shows a result, metric, or system property. Emphasize data integrity, automation, back-office relevance over frontend/UI. Count words — if >13 → cut.
 
-7. MILITARY: Max 3 bullets. Each bullet MUST fit on one line — hard limit 90 characters. Frame around precision, data accuracy, ownership, and high-pressure execution.
+7. MILITARY: Max 3 bullets. WORD LIMIT: max 13 words per bullet. Frame around precision, data accuracy, ownership, high-pressure execution. Count words — if >13 → cut.
 
 8. ACCURACY: Never overstate experience. If candidate worked at an AI/product startup, say "production data" not "finance data". Only use "finance" if the candidate's CV explicitly mentions finance work.
 
-9. JD COVERAGE CHECK: Before finalizing, verify these JD requirements each map to at least one bullet:
-   - Data entry and reconciliation ✓
-   - Investigating/tracing data discrepancies ✓
-   - Cross-functional collaboration (Finance, Ops, Tech) ✓
-   - Process documentation / workflow improvement ✓
-   - Data completeness and reliability ✓
+9. JD COVERAGE CHECK: Read the job description above. Extract the top 5 core responsibilities. Before finalizing, verify each one maps to at least one bullet somewhere in Work Experience or Projects. If a core responsibility has no matching bullet, replace a weak bullet with one that covers it.
 
 10. ONE PAGE: Entire CV MUST fit on one printed page. Ruthlessly cut filler words. Every bullet = one tight punchy line. No bullet wraps to line 2.
 
