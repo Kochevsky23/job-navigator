@@ -220,7 +220,7 @@ TAILORING RULES:
 2. SUBTITLE: 3-part tagline matching the role. Max 8 words total. E.g. "Finance Operations | Data Entry & Accuracy | Process Improvement".
 
 3. PROFILE: Exactly 3 sentences. WORD LIMIT: max 13 words per sentence. First sentence bold (<strong>). Rules:
-   - Sentence 1: exact job title + candidate's most relevant background. NEVER say "finance data" if candidate didn't work in finance — say "production data" or "data analytics". Count: must be ≤13 words.
+   - Sentence 1: exact job title + candidate's most relevant background. NEVER use the word "candidate" — state the title confidently as if already in the role. NEVER say "finance data" if candidate didn't work in finance — say "production data" or "data analytics". Count: must be ≤13 words.
    - Sentence 2: 2-3 specific hard skills from job requirements + one proof point. Count: must be ≤13 words.
    - Sentence 3: MUST name the company (${job.company}) + their domain (e.g. venture capital, fintech) + value-add. Count: must be ≤13 words.
 
