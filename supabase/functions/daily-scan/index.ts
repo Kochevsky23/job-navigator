@@ -535,14 +535,14 @@ async function fetchLinkedInDescription(linkedinId: string): Promise<string | nu
     const markupMatch = html.match(/class="show-more-less-html__markup[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
     if (markupMatch) {
       const text = stripHtml(markupMatch[1]);
-      if (text.length > 100) return text.substring(0, 3000);
+      if (text.length > 100) return text.substring(0, 5000);
     }
 
     // Fallback: description section
     const sectionMatch = html.match(/<section[^>]*description[^>]*>([\s\S]*?)<\/section>/i);
     if (sectionMatch) {
       const text = stripHtml(sectionMatch[1]);
-      if (text.length > 100) return text.substring(0, 3000);
+      if (text.length > 100) return text.substring(0, 5000);
     }
 
     return null;
@@ -559,22 +559,22 @@ async function fetchCareersPageDescription(jobLink: string): Promise<string | nu
 
     // Try common job description containers
     const patterns = [
-      /class="[^"]*(?:job-description|jobDescription|job_description|description|posting-description)[^"]*"[^>]*>([\s\S]{200,3000}?)<\/(?:div|section|article)>/i,
-      /<(?:div|section|article)[^>]*id="[^"]*(?:description|job-detail)[^"]*"[^>]*>([\s\S]{200,3000}?)<\/(?:div|section|article)>/i,
+      /class="[^"]*(?:job-description|jobDescription|job_description|description|posting-description)[^"]*"[^>]*>([\s\S]{200,5000}?)<\/(?:div|section|article)>/i,
+      /<(?:div|section|article)[^>]*id="[^"]*(?:description|job-detail)[^"]*"[^>]*>([\s\S]{200,5000}?)<\/(?:div|section|article)>/i,
     ];
 
     for (const pattern of patterns) {
       const match = html.match(pattern);
       if (match) {
         const text = stripHtml(match[1]);
-        if (text.length > 150) return text.substring(0, 3000);
+        if (text.length > 150) return text.substring(0, 5000);
       }
     }
 
     // Generic fallback: strip full page and return first meaty block
     const stripped = stripHtml(html);
     const lines = stripped.split("\n").filter(l => l.trim().length > 40);
-    if (lines.length > 5) return lines.slice(0, 40).join("\n").substring(0, 3000);
+    if (lines.length > 5) return lines.slice(0, 60).join("\n").substring(0, 5000);
 
     return null;
   } catch {
@@ -638,7 +638,7 @@ Company: ${j.company}
 Role: ${j.role}
 Email exp label (UNRELIABLE): ${j.exp_required || "Not specified"}
 Description:
-${j.description.substring(0, 2000)}`
+${j.description.substring(0, 4000)}`
   ).join("\n\n---\n\n");
 
   const staticInstructions = `CRITICAL RULES (follow strictly):
@@ -769,7 +769,7 @@ Email Exp Label (unreliable): ${j.exp_required || "not specified"}
 Pre-extracted Experience Requirement: ${exp?.actual_exp_required || "Not specified"} (evidence: "${exp?.evidence || "n/a"}")
 Description Source: ${j.description_source}
 Job Description:
-${j.description.substring(0, 3000)}`;
+${j.description.substring(0, 4000)}`;
   }).join("\n\n---\n\n");
 
   const staticContent = `===== CANDIDATE PROFILE =====
