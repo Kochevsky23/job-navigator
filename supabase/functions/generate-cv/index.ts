@@ -219,10 +219,10 @@ TAILORING RULES:
 
 2. SUBTITLE: 3-part tagline matching the role. Max 8 words total. E.g. "Finance Operations | Data Entry & Accuracy | Process Improvement".
 
-3. PROFILE: Exactly 3 sentences. WORD LIMIT: max 13 words per sentence. First sentence bold (<strong>). Rules:
-   - Sentence 1: exact job title + candidate's most relevant background. NEVER use the word "candidate" — state the title confidently as if already in the role. NEVER say "finance data" if candidate didn't work in finance — say "production data" or "data analytics". Count: must be ≤13 words.
-   - Sentence 2: 2-3 specific hard skills from job requirements + one proof point. Count: must be ≤13 words.
-   - Sentence 3: MUST name the company (${job.company}) + their domain (e.g. venture capital, fintech) + value-add. Count: must be ≤13 words.
+3. PROFILE: Exactly 3 sentences. WORD LIMIT: max 11 words per sentence. First sentence bold (<strong>). Rules:
+   - Sentence 1: exact job title + candidate's most relevant background. NEVER use the word "candidate" — state the title confidently as if already in the role. NEVER say "finance data" if candidate didn't work in finance — say "production data" or "data analytics". Count words — must be ≤11.
+   - Sentence 2: 2-3 specific hard skills from job requirements + one proof point. Count words — must be ≤11.
+   - Sentence 3: MUST name the company (${job.company}) + their domain (e.g. venture capital, fintech) + value-add. Count words — must be ≤11. Avoid long compound words like "improvement" or "operational" — use short synonyms.
 
 4. SKILLS: Use EXACTLY these 5 category names — no renaming, no adding categories:
    - Programming: [languages only]
@@ -232,16 +232,18 @@ TAILORING RULES:
    - AI & Automation: [AI tools, automation]
    Do NOT add Git, Version Control, or any 6th category. Reorder items most JD-relevant first.
 
-5. EXPERIENCE: Max 5 bullets. WORD LIMIT: max 13 words per bullet. Rules:
-   - Every bullet = Action verb + what + result/metric. Good example: "Maintained SQL pipelines, reducing errors and improving reporting accuracy." (10 words ✓)
-   - Bad example: "Maintained and improved SQL data pipelines, ensuring data completeness and reliability for product teams." (15 words ✗ — too long, cut it)
+5. EXPERIENCE: Max 5 bullets. WORD LIMIT: max 11 words per bullet. Rules:
+   - Every bullet = Action verb + what + result/metric.
+   - Good: "Maintained SQL pipelines, reducing errors and improving accuracy." (9 words ✓)
+   - Bad: "Reconciled discrepancies across production data systems, ensuring consistency and completeness." (10 words but long words = wraps ✗ — shorten)
+   - Prefer short words: "errors" not "discrepancies", "complete" not "completeness", "moved" not "transferable".
    - REQUIRED: Every core responsibility listed in the job description must map to at least one bullet across Work Experience or Projects.
    - Mirror the exact action verbs and nouns from the JD responsibilities section.
-   - Count your words before writing each bullet. If >13 → rewrite shorter.
+   - Count your words before writing each bullet. If >11 → rewrite shorter.
 
-6. PROJECTS: Max 6 bullets. WORD LIMIT: max 13 words per bullet. Every bullet shows a result, metric, or system property. Emphasize data integrity, automation, back-office relevance over frontend/UI. Count words — if >13 → cut.
+6. PROJECTS: Max 6 bullets. WORD LIMIT: max 11 words per bullet. Every bullet shows a result, metric, or system property. Emphasize data integrity, automation, back-office relevance. Prefer short words. Count — if >11 → cut.
 
-7. MILITARY: Max 3 bullets. WORD LIMIT: max 13 words per bullet. Frame around precision, data accuracy, ownership, high-pressure execution. Count words — if >13 → cut.
+7. MILITARY: Max 3 bullets. WORD LIMIT: max 11 words per bullet. Frame around precision, data accuracy, ownership, execution. Prefer short words. Count — if >11 → cut.
 
 8. ACCURACY: Never overstate experience. If candidate worked at an AI/product startup, say "production data" not "finance data". Only use "finance" if the candidate's CV explicitly mentions finance work.
 
