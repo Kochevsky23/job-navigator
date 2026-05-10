@@ -9,8 +9,8 @@ const CV_CSS = `
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: Calibri, 'Segoe UI', Arial, sans-serif;
-  font-size: 11pt;
-  line-height: 1.4;
+  font-size: 10.5pt;
+  line-height: 1.3;
   color: #000;
   background: white;
   padding: 0;
@@ -18,7 +18,7 @@ body {
 }
 .cv-wrapper {
   border: 1px solid #000;
-  padding: 0.5in 0.6in;
+  padding: 0.45in 0.55in;
   min-height: 9.5in;
   max-width: 7.5in;
   margin: 0 auto;
@@ -28,57 +28,57 @@ body {
   text-align: center;
   font-size: 18pt;
   font-weight: bold;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   letter-spacing: 0.02em;
 }
 .cv-contact {
   text-align: center;
   font-size: 10pt;
   font-weight: bold;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 .cv-contact a { color: #000; text-decoration: underline; }
 .cv-subtitle {
   text-align: center;
-  font-size: 10.5pt;
+  font-size: 10pt;
   font-weight: normal;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .section-bar {
   background: #d9d9d9;
   text-align: center;
   padding: 1px 0;
-  margin: 8px 0 4px 0;
+  margin: 6px 0 3px 0;
 }
 .section-bar span {
   text-decoration: underline;
-  font-size: 11pt;
+  font-size: 10.5pt;
   font-weight: normal;
 }
 .entry-header {
   font-weight: bold;
-  margin-bottom: 2px;
-  margin-top: 3px;
+  margin-bottom: 1px;
+  margin-top: 2px;
 }
-p { margin-bottom: 3px; }
+p { margin-bottom: 2px; }
 ul {
-  margin-left: 18px;
-  margin-bottom: 4px;
+  margin-left: 16px;
+  margin-bottom: 2px;
   list-style-type: disc;
 }
-ul li { margin-bottom: 1px; }
+ul li { margin-bottom: 0px; }
 .skills-category { font-weight: bold; }
 @media print {
   * { box-sizing: border-box; }
   body { padding: 0; margin: 0; }
-  @page { size: A4; margin: 0.3in; }
+  @page { size: A4; margin: 0.25in; }
   .cv-wrapper {
     border: 1px solid #000 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     min-height: auto;
     margin: 0;
-    padding: 0.4in 0.5in;
+    padding: 0.35in 0.45in;
   }
   .section-bar {
     background: #d9d9d9 !important;
@@ -217,12 +217,14 @@ ${cvText.substring(0, CV_MAX_CHARS)}
 TAILORING RULES:
 1. KEYWORDS: Extract exact tech terms from job description. Mirror their language precisely.
 2. SUBTITLE: Generate a 3-part tagline matching the job. E.g. "Data Analyst | AI Applications | Product-Oriented". Keep concise.
-3. PROFILE: 3 lines. First line bold (<strong>). Open with the exact job title or close variant. Mention 2-3 specific technologies from the job description.
+3. PROFILE: Exactly 3 sentences. First sentence bold (<strong>). Max 15 words per sentence. Open with the exact job title or close variant.
 4. SKILLS: Group exactly as in the template (Programming / Data & BI / Backend & APIs / Frontend / AI & Automation). Reorder items within each group so job-matching skills appear first.
-5. EXPERIENCE: Rewrite bullets to foreground relevance. Strong action verbs. Preserve all real metrics.
-6. PROJECTS: Emphasize tech that matches the job. Use the exact technology names from the job description.
-7. PRESERVE: All dates, employer names, job titles, school names, GPA, real achievements.
-8. STRUCTURE: Always wrap everything in <div class="cv-wrapper">. Include the Additional section with Languages at the bottom.
+5. EXPERIENCE: Max 5 bullets. Each bullet MUST fit on one line — hard limit 90 characters including spaces. Strong action verb. One idea per bullet.
+6. PROJECTS: Max 6 bullets. Each bullet MUST fit on one line — hard limit 90 characters including spaces. Emphasize tech matching the job.
+7. MILITARY: Max 3 bullets. Each bullet MUST fit on one line — hard limit 90 characters.
+8. PRESERVE: All dates, employer names, job titles, school names, GPA, real achievements. Never invent facts.
+9. ONE PAGE: The entire CV MUST fit on one printed page. Ruthlessly cut filler words. Every bullet = one tight, punchy line.
+10. STRUCTURE: Always wrap everything in <div class="cv-wrapper">. Include the Additional section with Languages at the bottom.
 
 HTML STRUCTURE TO FOLLOW EXACTLY:
 ${STRUCTURE_EXAMPLE}
