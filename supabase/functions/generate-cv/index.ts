@@ -215,16 +215,39 @@ FULL CV (source of truth for all facts):
 ${cvText.substring(0, CV_MAX_CHARS)}
 
 TAILORING RULES:
-1. KEYWORDS: Extract exact tech terms from job description. Mirror their language precisely.
-2. SUBTITLE: Generate a 3-part tagline matching the job. E.g. "Data Analyst | AI Applications | Product-Oriented". Keep concise.
-3. PROFILE: Exactly 3 sentences. First sentence bold (<strong>). Max 15 words per sentence. Open with the exact job title or close variant.
-4. SKILLS: Group exactly as in the template (Programming / Data & BI / Backend & APIs / Frontend / AI & Automation). Reorder items within each group so job-matching skills appear first.
-5. EXPERIENCE: Max 5 bullets. Each bullet MUST fit on one line — hard limit 90 characters including spaces. Strong action verb. One idea per bullet.
-6. PROJECTS: Max 6 bullets. Each bullet MUST fit on one line — hard limit 90 characters including spaces. Emphasize tech matching the job.
-7. MILITARY: Max 3 bullets. Each bullet MUST fit on one line — hard limit 90 characters.
-8. PRESERVE: All dates, employer names, job titles, school names, GPA, real achievements. Never invent facts.
-9. ONE PAGE: The entire CV MUST fit on one printed page. Ruthlessly cut filler words. Every bullet = one tight, punchy line.
-10. STRUCTURE: Always wrap everything in <div class="cv-wrapper">. Include the Additional section with Languages at the bottom.
+1. KEYWORDS: Extract exact phrases from the job description. Mirror their language precisely — if JD says "reconcile discrepancies", use that exact phrase.
+
+2. SUBTITLE: 3-part tagline matching the role. Max 8 words total. E.g. "Finance Operations | Data Entry & Accuracy | Process Improvement".
+
+3. PROFILE: Exactly 3 sentences. Each sentence MUST fit on ONE line (max 90 chars). First sentence bold (<strong>). Rules:
+   - Sentence 1: exact job title + candidate's most relevant background. NEVER say "finance data" if candidate didn't work in finance — say "production data" or "data analytics".
+   - Sentence 2: 2-3 specific hard skills from job requirements + one proof point.
+   - Sentence 3: MUST name the company (${job.company}) + their domain (e.g. venture capital, fintech, etc.) + candidate's value-add.
+
+4. SKILLS: Group exactly as in the template. Within each group, put most JD-relevant skills first. If JD mentions Excel with specific techniques (formulas, lookups, filtering, data validation) — include ALL of them verbatim.
+
+5. EXPERIENCE: Max 5 bullets. Each bullet MUST fit on one line — hard limit 90 characters. Rules:
+   - Every bullet = Action verb + what you did + result/outcome/metric.
+   - REQUIRED: Include one bullet explicitly about investigating or tracing data discrepancies to root cause.
+   - Use exact JD language: "reconcile", "data completeness", "consistency", "reliability", "cross-functional".
+   - Bullet with no outcome = rejected. Add: "reducing X", "improving Y", "ensuring Z".
+
+6. PROJECTS: Max 6 bullets. Each bullet MUST fit on one line — hard limit 90 characters. Every bullet must show a result, metric, or system property. Emphasize data integrity, automation, and back-office relevance over frontend/UI.
+
+7. MILITARY: Max 3 bullets. Each bullet MUST fit on one line — hard limit 90 characters. Frame around precision, data accuracy, ownership, and high-pressure execution.
+
+8. ACCURACY: Never overstate experience. If candidate worked at an AI/product startup, say "production data" not "finance data". Only use "finance" if the candidate's CV explicitly mentions finance work.
+
+9. JD COVERAGE CHECK: Before finalizing, verify these JD requirements each map to at least one bullet:
+   - Data entry and reconciliation ✓
+   - Investigating/tracing data discrepancies ✓
+   - Cross-functional collaboration (Finance, Ops, Tech) ✓
+   - Process documentation / workflow improvement ✓
+   - Data completeness and reliability ✓
+
+10. ONE PAGE: Entire CV MUST fit on one printed page. Ruthlessly cut filler words. Every bullet = one tight punchy line. No bullet wraps to line 2.
+
+11. STRUCTURE: Always wrap everything in <div class="cv-wrapper">. Include Additional section with Languages at the bottom.
 
 HTML STRUCTURE TO FOLLOW EXACTLY:
 ${STRUCTURE_EXAMPLE}
