@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.39.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { getVaultToken } from "../_shared/vault.ts";
 
 function getHeader(payload: any, name: string): string {
   const header = payload.headers?.find((h: any) => h.name.toLowerCase() === name.toLowerCase());
@@ -179,12 +180,14 @@ Deno.serve(async (req) => {
   try {
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("google_refresh_token, last_status_sync_timestamp")
+      .select("vault_token_id, last_status_sync_timestamp")
       .eq("id", userId)
       .single();
 
-    const refreshToken = profile?.google_refresh_token;
-    if (!refreshToken) throw new Error("Gmail not connected.");
+    const vaultTokenId = (profile as any)?.vault_token_id;
+    if (!vaultTokenId) throw new Error("Gmail not connected.");
+    const refreshToken = await getVaultToken(supabase, vaultTokenId);
+    if (!refreshToken) throw new Error("Failed to decrypt Gmail token. Please reconnect Gmail in Settings.");
 
     const nowSec = Math.floor(Date.now() / 1000);
     const sevenDaysAgoSec = nowSec - 7 * 24 * 60 * 60;

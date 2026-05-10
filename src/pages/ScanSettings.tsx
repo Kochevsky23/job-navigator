@@ -483,6 +483,10 @@ export default function ScanSettings() {
                   rows={10}
                 />
                 <p className="text-xs text-muted-foreground">This text is used for scoring and tailored CV generation</p>
+                <p className="text-xs text-muted-foreground/60 flex items-center gap-1">
+                  <Lock className="h-3 w-3 shrink-0" />
+                  CV text and job email content are sent to Anthropic's Claude API for AI analysis. Anthropic may retain inputs for up to 30 days per their <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">privacy policy</a>.
+                </p>
               </div>
 
               <Button onClick={handleSaveProfile} disabled={saving} className="w-full gap-2">

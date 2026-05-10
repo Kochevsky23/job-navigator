@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { createDebugLogger } from "../_shared/debug.ts";
+import { getVaultToken } from "../_shared/vault.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1046,7 +1047,7 @@ Deno.serve(async (req) => {
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("cv_text, full_name, city, google_refresh_token, last_email_scan_timestamp, candidate_profile, scoring_feedback")
+    .select("cv_text, full_name, city, vault_token_id, last_email_scan_timestamp, candidate_profile, scoring_feedback")
     .eq("id", userId)
     .single();
 
@@ -1062,8 +1063,10 @@ Deno.serve(async (req) => {
   let maxEmailTimestampSec = 0; // hoisted so catch block can advance the timestamp on failure
 
   try {
-    const refreshToken = (profile as any)?.google_refresh_token;
-    if (!refreshToken) throw new Error("Gmail not connected. Please connect your Gmail account in Settings.");
+    const vaultTokenId = (profile as any)?.vault_token_id;
+    if (!vaultTokenId) throw new Error("Gmail not connected. Please connect your Gmail account in Settings.");
+    const refreshToken = await getVaultToken(supabase, vaultTokenId);
+    if (!refreshToken) throw new Error("Failed to decrypt Gmail token. Please reconnect Gmail in Settings.");
 
     console.log("[1] Getting Google access token...");
     const accessToken = await getGoogleAccessToken(refreshToken);

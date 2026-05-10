@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { upsertVaultToken } from "../_shared/vault.ts";
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -57,14 +58,33 @@ Deno.serve(async (req) => {
     return Response.redirect(`${redirectUrl}?gmail=error&reason=no_refresh_token`);
   }
 
-  // Store refresh token in user's profile
+  // Get existing vault_token_id (for update vs create)
+  const { data: existingProfile } = await supabase
+    .from("user_profiles")
+    .select("vault_token_id")
+    .eq("id", userId)
+    .single();
+
+  // Store refresh token in Vault (encrypted), save UUID reference in profile
+  const vaultId = await upsertVaultToken(
+    supabase,
+    (existingProfile as any)?.vault_token_id ?? null,
+    tokenData.refresh_token,
+    userId
+  );
+
+  if (!vaultId) {
+    console.error("Failed to store refresh token in vault for user:", userId);
+    return Response.redirect(`${redirectUrl}?gmail=error&reason=store_failed`);
+  }
+
   const { error: updateError } = await supabase
     .from("user_profiles")
-    .update({ google_refresh_token: tokenData.refresh_token })
+    .update({ vault_token_id: vaultId, google_refresh_token: null })
     .eq("id", userId);
 
   if (updateError) {
-    console.error("Failed to store refresh token:", updateError);
+    console.error("Failed to update vault_token_id:", updateError);
     return Response.redirect(`${redirectUrl}?gmail=error&reason=store_failed`);
   }
 

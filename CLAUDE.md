@@ -10,6 +10,20 @@ Reference: `/Users/dorkochevsky/job-navigator/.claude/skills/caveman/SKILL.md`
 
 ---
 
+## Multi-User First (ALWAYS ACTIVE)
+
+**Every feature, fix, and change must work for ALL users — not just the current single user.**
+
+Rules:
+- Never hardcode user IDs, emails, city names, or experience levels
+- All DB queries must filter by `user_id` (RLS + explicit `.eq("user_id", userId)`)
+- All scoring logic derives from `candidate_profile` per user (no hardcoded assumptions)
+- All secrets/tokens stored per-user (e.g. `vault_token_id` in `user_profiles`, not a global env var)
+- Cron jobs iterate all users via `user_profiles` table
+- Edge functions always resolve `userId` from JWT or service-role body param — never assume single user
+
+---
+
 ## Session Management
 
 ### "Session Ended"

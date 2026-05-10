@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { getVaultToken } from "../_shared/vault.ts";
 
 async function getAccessToken(refreshToken: string): Promise<string> {
   const resp = await fetch("https://oauth2.googleapis.com/token", {
@@ -46,19 +47,26 @@ Deno.serve(async (req) => {
     // Get refresh token
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("google_refresh_token, full_name")
+      .select("vault_token_id, full_name")
       .eq("id", user.id)
       .single();
 
-    if (!profile?.google_refresh_token) {
+    const vaultTokenId = (profile as any)?.vault_token_id;
+    if (!vaultTokenId) {
       return new Response(JSON.stringify({ error: "Gmail not connected." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const refreshToken = await getVaultToken(supabase, vaultTokenId);
+    if (!refreshToken) {
+      return new Response(JSON.stringify({ error: "Failed to decrypt Gmail token. Please reconnect Gmail." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     let accessToken: string;
     try {
-      accessToken = await getAccessToken(profile.google_refresh_token);
+      accessToken = await getAccessToken(refreshToken);
     } catch (e: any) {
       if (e.message === "REAUTH_REQUIRED") {
         return new Response(JSON.stringify({ error: "REAUTH_REQUIRED", message: "Reconnect Gmail to grant Sheets access." }), {
