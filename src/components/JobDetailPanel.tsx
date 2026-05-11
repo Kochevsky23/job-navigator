@@ -1,7 +1,7 @@
 import { Job } from '@/types/database';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, FileText, Loader2, Download, CheckCircle2, Send, StickyNote, Save, BookOpen, Building2, Sparkles, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { ExternalLink, FileText, Loader2, Download, CheckCircle2, Send, StickyNote, Save, BookOpen, Building2, Sparkles, ChevronDown, ChevronUp, RefreshCw, Clock, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import { generateCV, generateCoverLetter, generateInterviewPrep, generateCompanyResearch } from '@/lib/api';
 import { db } from '@/lib/supabase-external';
@@ -346,6 +346,25 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
               <p className="mt-1 text-sm leading-relaxed" dir="auto">{job.reason}</p>
             </div>
           </div>
+
+          {/* Next Action */}
+          {job.next_action && (() => {
+            const isOverdue = job.next_action_due_at && new Date(job.next_action_due_at) < new Date();
+            return (
+              <div className={`flex items-start gap-2 rounded-xl px-3 py-2.5 text-sm ${isOverdue ? 'bg-red-500/10 border border-red-500/30 text-red-400' : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'}`}>
+                {isOverdue ? <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" /> : <Clock className="h-4 w-4 mt-0.5 shrink-0" />}
+                <div className="min-w-0">
+                  <span className="font-medium">{job.next_action}</span>
+                  {job.next_action_due_at && (
+                    <span className="ml-2 opacity-70 text-xs">
+                      {isOverdue ? 'Overdue · ' : 'Due · '}
+                      {new Date(job.next_action_due_at).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Apply */}
           {!isApplied && job.priority !== 'REJECTED' && (

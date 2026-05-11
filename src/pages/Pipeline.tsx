@@ -13,9 +13,11 @@ const COLUMNS: { id: JobStatus; label: string; borderColor: string }[] = [
   { id: 'New', label: 'New', borderColor: 'border-t-accent' },
   { id: 'Old', label: 'Old', borderColor: 'border-t-orange-400' },
   { id: 'Applied', label: 'Applied', borderColor: 'border-t-[hsl(var(--info))]' },
+  { id: 'Assessment', label: 'Assessment', borderColor: 'border-t-purple-400' },
   { id: 'Interviewing', label: 'Interviewing', borderColor: 'border-t-[hsl(var(--warning))]' },
   { id: 'Offer', label: 'Offer', borderColor: 'border-t-[hsl(var(--success))]' },
   { id: 'Rejected', label: 'Rejected', borderColor: 'border-t-destructive' },
+  { id: 'Ghosted', label: 'Ghosted', borderColor: 'border-t-slate-500' },
 ];
 
 const priorityDot: Record<string, string> = {
@@ -63,7 +65,9 @@ interface PendingStatusChanges {
 
 const statusColor: Record<string, string> = {
   Applied: 'text-[hsl(var(--info))]',
+  Assessment: 'text-purple-400',
   Interviewing: 'text-[hsl(var(--warning))]',
+  Ghosted: 'text-slate-400',
   Offer: 'text-[hsl(var(--success))]',
   Rejected: 'text-destructive',
   New: 'text-accent',

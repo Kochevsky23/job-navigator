@@ -5,7 +5,7 @@ import { db } from '@/lib/supabase-external';
 import { runDailyScan, syncJobStatuses } from '@/lib/api';
 import { Job, ScanRun } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, AlertTriangle, FileText, Loader2, Radar, ArrowRight, CheckCircle2, XCircle, Send, BarChart3, User, MapPin, RefreshCw } from 'lucide-react';
+import { Briefcase, AlertTriangle, FileText, Loader2, Radar, ArrowRight, CheckCircle2, XCircle, Send, BarChart3, User, MapPin, RefreshCw, Clock, Ghost, Swords, Gift } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -204,6 +204,13 @@ export default function Dashboard() {
   ];
   const maxPipelineCount = Math.max(...pipeline.map(s => s.count), 1);
 
+  // Health signals
+  const now = new Date();
+  const ghostRisk = jobs.filter(j => j.status === 'Applied' && j.applied_at && (now.getTime() - new Date(j.applied_at).getTime()) > 14 * 86400000).length;
+  const overdueActions = jobs.filter(j => j.next_action && j.next_action_due_at && new Date(j.next_action_due_at) < now).length;
+  const activeProcess = jobs.filter(j => j.status === 'Assessment' || j.status === 'Interviewing').length;
+  const offerPending = jobs.filter(j => j.status === 'Offer').length;
+
   // ML metrics
   const rated = jobs.filter(j => j.user_score !== null && j.user_score !== undefined);
   const hasMetrics = rated.length >= 3;
@@ -319,6 +326,56 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* Health Cards */}
+      {(ghostRisk > 0 || overdueActions > 0 || activeProcess > 0 || offerPending > 0) && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-fade-up" style={{ animationDelay: '280ms' }}>
+          {ghostRisk > 0 && (
+            <div className="glass-card rounded-xl p-4 border-t-2 border-t-slate-500/60 flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-slate-500/10 flex items-center justify-center shrink-0">
+                <Ghost className="h-4 w-4 text-slate-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-display font-bold tabular-nums">{ghostRisk}</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Ghost risk</p>
+              </div>
+            </div>
+          )}
+          {overdueActions > 0 && (
+            <div className="glass-card rounded-xl p-4 border-t-2 border-t-red-500/60 flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
+                <Clock className="h-4 w-4 text-red-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-display font-bold tabular-nums">{overdueActions}</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Overdue actions</p>
+              </div>
+            </div>
+          )}
+          {activeProcess > 0 && (
+            <div className="glass-card rounded-xl p-4 border-t-2 border-t-purple-500/60 flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
+                <Swords className="h-4 w-4 text-purple-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-display font-bold tabular-nums">{activeProcess}</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">In process</p>
+              </div>
+            </div>
+          )}
+          {offerPending > 0 && (
+            <div className="glass-card rounded-xl p-4 border-t-2 border-t-emerald-500/60 flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <Gift className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-display font-bold tabular-nums">{offerPending}</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Offer pending</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Best Matches */}
       {topJobs.length > 0 && (

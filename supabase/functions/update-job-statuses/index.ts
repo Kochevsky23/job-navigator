@@ -36,7 +36,7 @@ interface EmailSummary {
 interface ClaudeMatch {
   emailIndex: number;
   company: string;
-  newStatus: 'Applied' | 'Interviewing' | 'Rejected' | 'Offer';
+  newStatus: 'Applied' | 'Assessment' | 'Interviewing' | 'Rejected' | 'Offer';
   confidence: number;
   reason: string;
 }
@@ -83,7 +83,8 @@ Match companies even when the sender differs from the company name — examples:
 
 Status definitions:
 - "Applied": application was received / confirmed by the company
-- "Interviewing": invited for an interview or screening call
+- "Assessment": invited to complete a technical test, coding challenge, case study, or online assessment
+- "Interviewing": invited for an interview or screening call (phone, video, or in-person)
 - "Rejected": not moving forward, chose other candidates, position filled, "less suitable", etc.
 - "Offer": job offer was extended
 
@@ -99,6 +100,7 @@ Rules:
 CRITICAL — rejection signals always win:
 - If subject or snippet contains: "unfortunately", "not moving forward", "other candidates", "not selected", "position filled", "decided to move forward with", "לא נוכל", "מצטערים", "לא עברת", "chose other" → classify as "Rejected" regardless of the sending platform
 - Greenhouse, Lever, Workday, SmartRecruiters, Taleo send BOTH rejections AND interview invites — do NOT infer "Interviewing" just because the email comes from one of these ATS platforms
+- Only classify as "Assessment" when subject/snippet explicitly mentions: test, challenge, assignment, task, HackerRank, Codility, online assessment, case study, homework, exercise — AND there are no rejection keywords present
 - Only classify as "Interviewing" when subject/snippet explicitly mentions: interview, screening call, schedule a call, next step, meet with us, calendly link, availability, "let's talk", "we'd like to speak" — AND there are no rejection keywords present
 
 CONFIDENCE SCORING — include a confidence value (0.0–1.0) per match:
@@ -114,7 +116,7 @@ Return ONLY a valid JSON array, no explanation, no markdown:
   {
     "emailIndex": 1,
     "company": "exact company name from the tracked list",
-    "newStatus": "Applied" | "Interviewing" | "Rejected" | "Offer",
+    "newStatus": "Applied" | "Assessment" | "Interviewing" | "Rejected" | "Offer",
     "confidence": 0.95,
     "reason": "one sentence explaining the match"
   }
@@ -210,9 +212,9 @@ Deno.serve(async (req) => {
 
     const { data: jobs, error: jobsError } = await supabase
       .from("jobs")
-      .select("id, company, role, status, company_domain, alert_date")
+      .select("id, company, role, status, company_domain, alert_date, applied_at")
       .eq("user_id", userId)
-      .in("status", ["New", "Old", "Applied", "Interviewing"])
+      .in("status", ["New", "Old", "Applied", "Assessment", "Interviewing", "Offer"])
       .order("alert_date", { ascending: false });
 
     if (jobsError) throw new Error(`Failed to fetch jobs: ${jobsError.message}`);
@@ -297,7 +299,7 @@ Deno.serve(async (req) => {
     const updates: Array<{ company: string; role: string; oldStatus: string; newStatus: string }> = [];
     const pendingChanges: PendingChange[] = [];
 
-    const statusRank: Record<string, number> = { New: 0, Old: 0, Applied: 1, Interviewing: 2, Offer: 3, Rejected: 3 };
+    const statusRank: Record<string, number> = { New: 0, Old: 0, Applied: 1, Assessment: 2, Interviewing: 3, Offer: 4, Rejected: 4, Ghosted: 1 };
 
     for (const match of matches) {
       const job = jobs.find(j => j.company === match.company);
@@ -341,7 +343,84 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Step 5: Save timestamp, auto-applied changes, and pending changes ─────
+    // ── Step 5: Ghosted detection — Applied jobs with no response for 21+ days ─
+    const twentyOneDaysAgo = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000);
+    const emailCompanyHints = emails.map(e => (e.from + " " + e.subject).toLowerCase());
+
+    for (const job of jobs) {
+      if (job.status !== "Applied") continue;
+      if (!job.applied_at || new Date(job.applied_at) > twentyOneDaysAgo) continue;
+      if (matches.some(m => m.company === job.company)) continue; // email found — not ghosted
+      if (pendingChanges.some(p => p.jobId === job.id)) continue;
+      // Check if any fetched email mentions this company
+      const companyLower = (job.company || "").toLowerCase().split(" ")[0]; // first word is usually distinctive
+      const emailMentions = emailCompanyHints.some(hint => companyLower.length > 3 && hint.includes(companyLower));
+      if (emailMentions) continue;
+
+      const daysSince = Math.floor((Date.now() - new Date(job.applied_at).getTime()) / (1000 * 60 * 60 * 24));
+      pendingChanges.push({
+        jobId: job.id,
+        company: job.company,
+        role: job.role,
+        oldStatus: job.status,
+        newStatus: "Ghosted",
+        confidence: 0.72,
+        reason: `No recruiter response detected after ${daysSince} days. Consider archiving or following up.`,
+      });
+      console.log(`[ghosted] ${job.company} — ${daysSince} days since applying, suggesting Ghosted`);
+    }
+
+    // ── Step 6: Compute next_action for all active jobs ───────────────────────
+    const now = new Date();
+    const nextActionUpdates: { id: string; next_action: string | null; next_action_due_at: string | null }[] = [];
+
+    for (const job of jobs) {
+      let next_action: string | null = null;
+      let next_action_due_at: string | null = null;
+
+      const currentStatus = job.status; // reflects any auto-applies from step 4
+      const appliedAt = job.applied_at ? new Date(job.applied_at) : null;
+      const daysSinceApplied = appliedAt ? Math.floor((now.getTime() - appliedAt.getTime()) / (1000 * 60 * 60 * 24)) : null;
+
+      if (currentStatus === "Applied" && daysSinceApplied !== null) {
+        if (daysSinceApplied < 7) {
+          next_action = "Awaiting recruiter response";
+          next_action_due_at = appliedAt ? new Date(appliedAt.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() : null;
+        } else if (daysSinceApplied < 14) {
+          next_action = "Follow up with the recruiter";
+          next_action_due_at = now.toISOString();
+        } else if (daysSinceApplied < 21) {
+          next_action = "Follow up urgently — response overdue";
+          next_action_due_at = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+        } else {
+          next_action = "No response — mark as ghosted or archive";
+          next_action_due_at = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        }
+      } else if (currentStatus === "Assessment") {
+        next_action = "Complete or prepare for the assessment";
+        next_action_due_at = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
+      } else if (currentStatus === "Interviewing") {
+        next_action = "Prepare thoroughly for the next interview stage";
+        next_action_due_at = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
+      } else if (currentStatus === "Offer") {
+        next_action = "Review the offer and respond";
+        next_action_due_at = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
+      }
+
+      nextActionUpdates.push({ id: job.id, next_action, next_action_due_at });
+    }
+
+    await Promise.all(
+      nextActionUpdates.map(u =>
+        supabase.from("jobs")
+          .update({ next_action: u.next_action, next_action_due_at: u.next_action_due_at })
+          .eq("id", u.id)
+          .eq("user_id", userId)
+      )
+    );
+    console.log(`[update-job-statuses] next_action updated for ${nextActionUpdates.length} jobs`);
+
+    // ── Step 7: Save timestamp, auto-applied changes, and pending changes ─────
     const profileUpdate: Record<string, any> = { last_status_sync_timestamp: nowSec };
     if (updates.length > 0) {
       profileUpdate.last_status_changes = {
