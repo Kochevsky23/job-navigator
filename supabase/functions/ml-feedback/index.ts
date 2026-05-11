@@ -35,7 +35,20 @@ Deno.serve(async (req) => {
       userId = user.id;
     }
 
-    // ── Load all rated jobs ────────────────────────────────────────────────────
+    // ── Load candidate profile + rated jobs ───────────────────────────────────
+    const { data: profileRow } = await supabase
+      .from("user_profiles")
+      .select("candidate_profile")
+      .eq("id", userId)
+      .single();
+    const cp = (profileRow as any)?.candidate_profile || {};
+    const candidateDesc = [
+      cp.experience_level && `${cp.experience_level} candidate`,
+      cp.education_field && `in ${cp.education_field}`,
+      cp.city && `from ${cp.city}`,
+      cp.domains?.length && `(domains: ${cp.domains.join(", ")})`,
+    ].filter(Boolean).join(" ") || "a job candidate";
+
     const { data: ratedJobs, error: jobsError } = await supabase
       .from("jobs")
       .select("company, role, location, score, priority, exp_required, reason, user_score, description")
@@ -91,7 +104,7 @@ Deno.serve(async (req) => {
       ? `TRUE POSITIVES (AI said HIGH AND user liked — correct):\n${tpJobs.map(formatJob).join("\n")}`
       : "";
 
-    const prompt = `You are analyzing AI scoring errors for a job search tool. The AI scores jobs 0-10 (HIGH=8+, MEDIUM=5-7, LOW=2-4, REJECTED<2) for a student candidate in Industrial Engineering from Kfar Saba, Israel.
+    const prompt = `You are analyzing AI scoring errors for a job search tool. The AI scores jobs 0-10 (HIGH=8+, MEDIUM=5-7, LOW=2-4, REJECTED<2) for ${candidateDesc}.
 
 Scoring factors:
 - Factor 1: Skills match (0-3 pts)

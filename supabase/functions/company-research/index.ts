@@ -54,10 +54,10 @@ async function searchExaSalary(role: string, location: string): Promise<string> 
   if (!apiKey) return "";
 
   const year = new Date().getFullYear();
-  const isIsrael = !location || /israel|tel.?aviv|haifa|jerusalem|beer.?sheva|herzliya|ra'anana|petah|rishon/i.test(location);
+  const isIsrael = /israel|tel.?aviv|haifa|jerusalem|beer.?sheva|herzliya|ra'anana|petah|rishon/i.test(location || "");
   const query = isIsrael
     ? `${role} salary Israel tech ILS NIS shekel ${year} site:glassdoor.com OR site:jobmaster.co.il OR site:alljobs.co.il OR site:drushim.co.il`
-    : `${role} salary ${location} ${year}`;
+    : `${role} salary ${location || "tech"} ${year}`;
 
   try {
     const resp = await fetch("https://api.exa.ai/search", {
@@ -110,9 +110,11 @@ Deno.serve(async (req) => {
     if (!rl.allowed) throw new Error(`Rate limit reached. Try again in ${Math.ceil((rl.retryAfterSeconds ?? 3600) / 60)} minutes.`);
 
     // Fetch Exa + Brave in parallel — both optional, never block on failure
+    const jobLocation = job.location ?? "";
+    const isIsraelJob = /israel|tel.?aviv|haifa|jerusalem|beer.?sheva|herzliya|ra'anana|petah|rishon/i.test(jobLocation);
     const [exaResults, salaryResults] = await Promise.all([
       searchExa(job.company, job.company_domain ?? ""),
-      searchExaSalary(job.role, job.location ?? ""),
+      searchExaSalary(job.role, jobLocation),
     ]);
 
     const webContext = exaResults
@@ -155,7 +157,10 @@ WHY THIS ROLE MATTERS
 How ${job.role} fits into the company and what impact it has.
 
 SALARY RANGE
-Estimated gross monthly salary in ILS (₪) for this role in Israel. IMPORTANT: Ignore any USD figures or numbers from Levels.fyi/PayScale/TalentUp — those reflect US/global markets and are 3-5x inflated for Israel. Israeli tech salaries: junior ~₪12,000–18,000/mo, mid ~₪18,000–28,000/mo, senior ~₪28,000–45,000/mo gross. Use these baselines unless Israeli-specific sources (Glassdoor IL, jobmaster.co.il, drushim.co.il) show different figures. State the range and note it is an estimate.
+${isIsraelJob
+  ? "Estimated gross monthly salary in ILS (₪) for this role in Israel. IMPORTANT: Ignore USD figures from Levels.fyi/PayScale/TalentUp — those reflect US/global markets (3-5x inflated for Israel). Israeli tech salaries: junior ~₪12,000–18,000/mo, mid ~₪18,000–28,000/mo, senior ~₪28,000–45,000/mo gross. Use these baselines unless Israeli-specific sources (Glassdoor IL, jobmaster.co.il, drushim.co.il) show different figures."
+  : `Estimated salary range for this role in ${jobLocation || "this market"}. Use local market data where available. State the range, currency, and note it is an estimate.`
+}
 
 SMART QUESTIONS TO RESEARCH BEFORE THE INTERVIEW
 2 specific things to look up or read before applying.
