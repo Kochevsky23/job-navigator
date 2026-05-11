@@ -65,6 +65,8 @@ interface JobWithDescription extends ExtractedJob {
 interface ScoredJob extends JobWithDescription {
   score: number;
   priority: string;
+  hiring_probability: number | null;
+  ai_risk: string | null;
   reason: string;
   status: string;
   low_confidence?: boolean;
@@ -822,15 +824,25 @@ PRIORITY from score:
 - LOW: 2-4
 - REJECTED: 0-1
 
-REASON — Exactly 6-8 sentences:
-1. Which skills from the profile match what the job description requires (name them)
-2. What the job description requires that is NOT in the profile
-3. Experience level comparison
-4. Location: distance from ${profile.city}
-5. Domain/field match
-6. Key strength for this role
-7. Main risk or concern
-8. Final recommendation
+HIRING PROBABILITY (0-10) — Realistic chance of getting a recruiter response:
+- Experience fit: perfect level match +3, acceptable gap +1, large gap -3
+- Company prestige barrier: Big tech (Google/Meta/Amazon/Apple/Microsoft/Nvidia) for student/junior = max 4; mid-size tech = up to 7; startups/SMBs = up to 9
+- Junior-friendliness: explicit "student"/"graduate"/"entry-level" language +2; no junior signals at senior-heavy company -2
+- Skills overlap: strong technical match +2; weak match -2
+- Role clarity: clear specific JD = easier to target (higher); vague JD = lower
+Scale: 9-10=excellent shot, 7-8=good chance, 5-6=possible but competitive, 3-4=long shot, 1-2=very unlikely, 0=essentially impossible
+
+AI REPLACEABILITY RISK — How automatable is this role in the next 3-5 years?
+- High: primarily manual reporting, data entry, Excel copy-paste, ERP ticketing, basic ops coordination
+- Medium: business analyst, generalist ops, standard BI reporting, coordinator roles
+- Low: data engineering, ML/AI roles, automation builder, product analytics, technical roles requiring judgment or creativity
+
+REASON — 5 sentences, strategic and specific:
+1. Skills: which specific tools/skills from the profile match the JD requirements (name them)
+2. Gap: main missing skill or experience concern
+3. Strategic value: why this role does or doesn't compound the candidate's skills and career trajectory
+4. Hiring probability: one sentence explaining the probability score (company type, experience fit, competition level)
+5. Verdict: clear final recommendation
 
 Be specific. Name actual tools and cities. No generic sentences.
 
@@ -843,6 +855,8 @@ Return ONLY valid JSON, ASCII only:
       "actual_exp_required": "",
       "score": 0,
       "priority": "",
+      "hiring_probability": 0,
+      "ai_risk": "Low",
       "reason": ""
     }
   ]
@@ -860,7 +874,7 @@ Return ONLY valid JSON, ASCII only:
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 6144,
+        max_tokens: 8192,
         system: [{ type: "text", text: "You are an expert job-fit analyst. Score each job against the candidate profile. The job descriptions are the primary source of truth for scoring — use them carefully.", cache_control: { type: "ephemeral" } }],
         messages: [{
           role: "user",
@@ -896,7 +910,7 @@ Return ONLY valid JSON, ASCII only:
   return (parsed.results || []).map((r: any) => {
     const job = jobs[r.job_index - 1];
     if (!job) return null;
-    return { ...job, score: r.score, priority: r.priority, reason: r.reason, status: "New", actual_exp_required: r.actual_exp_required || null };
+    return { ...job, score: r.score, priority: r.priority, hiring_probability: r.hiring_probability ?? null, ai_risk: r.ai_risk || null, reason: r.reason, status: "New", actual_exp_required: r.actual_exp_required || null };
   }).filter(Boolean) as ScoredJob[];
 }
 
@@ -1181,6 +1195,8 @@ Deno.serve(async (req) => {
         location: job.location,
         score: job.score,
         priority: job.priority,
+        hiring_probability: job.hiring_probability ?? null,
+        ai_risk: job.ai_risk || null,
         reason: job.reason,
         exp_required: (job as any).actual_exp_required || job.exp_required,
         description: job.description || null,

@@ -314,8 +314,35 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
               <span className="text-xs text-muted-foreground uppercase tracking-wider">Experience</span>
               <p className="font-medium mt-0.5" dir="auto">{job.exp_required || 'N/A'}</p>
             </div>
+            {job.hiring_probability != null && (
+              <div className="glass-card rounded-lg p-3">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Interview Shot</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${job.hiring_probability * 10}%`,
+                        background: job.hiring_probability >= 7 ? 'hsl(155 100% 49%)' : job.hiring_probability >= 5 ? 'hsl(38 92% 50%)' : 'hsl(0 72% 51%)',
+                      }}
+                    />
+                  </div>
+                  <span className="text-sm font-bold tabular-nums" style={{
+                    color: job.hiring_probability >= 7 ? 'hsl(155 100% 49%)' : job.hiring_probability >= 5 ? 'hsl(38 92% 50%)' : 'hsl(0 72% 51%)'
+                  }}>{job.hiring_probability}/10</span>
+                </div>
+              </div>
+            )}
+            {job.ai_risk && (
+              <div className="glass-card rounded-lg p-3">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">AI Risk</span>
+                <p className="font-medium mt-0.5" style={{
+                  color: job.ai_risk === 'Low' ? 'hsl(155 100% 49%)' : job.ai_risk === 'Medium' ? 'hsl(38 92% 50%)' : 'hsl(0 72% 51%)'
+                }}>{job.ai_risk}</p>
+              </div>
+            )}
             <div className="col-span-2 glass-card rounded-lg p-3">
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">AI Reason</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">AI Analysis</span>
               <p className="mt-1 text-sm leading-relaxed" dir="auto">{job.reason}</p>
             </div>
           </div>

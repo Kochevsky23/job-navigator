@@ -21,6 +21,8 @@ export interface Job {
   company_domain: string | null;
   notes: string | null;
   user_score: number | null;
+  hiring_probability: number | null;
+  ai_risk: string | null;
   cover_letter: string | null;
   interview_prep: string | null;
   company_research: string | null;
