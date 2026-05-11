@@ -40,6 +40,7 @@ export default function ScanSettings() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [gmailConnected, setGmailConnected] = useState(false);
   const [connectingGmail, setConnectingGmail] = useState(false);
+  const [linkedinUrl, setLinkedinUrl] = useState('');
   const [reanalyzing, setReanalyzing] = useState(false);
   const [runningML, setRunningML] = useState(false);
 
@@ -63,10 +64,11 @@ export default function ScanSettings() {
     if (data) {
       setFullName((data as any).full_name || '');
       setCity((data as any).city || '');
+      setLinkedinUrl((data as any).linkedin_url || '');
       setCvText((data as any).cv_text || '');
       setCvFilename((data as any).cv_filename || '');
       setAvatarUrl((data as any).avatar_url || '');
-      setGmailConnected(!!(data as any).google_refresh_token);
+      setGmailConnected(!!(data as any).vault_token_id);
     }
     setEmail(user?.email || '');
     setProfileLoading(false);
@@ -140,7 +142,7 @@ export default function ScanSettings() {
       const { data: oldProfile } = await supabase.from('user_profiles').select('cv_text').eq('id', user.id).single();
       const cvChanged = cvText !== (oldProfile as any)?.cv_text;
 
-      const updatePayload: Record<string, any> = { full_name: fullName, city, cv_text: cvText };
+      const updatePayload: Record<string, any> = { full_name: fullName, city, linkedin_url: linkedinUrl || null, cv_text: cvText };
       if (cvChanged) updatePayload.candidate_profile = null;
       const { error } = await supabase.from('user_profiles').update(updatePayload).eq('id', user.id);
       if (error) throw error;
@@ -431,6 +433,21 @@ export default function ScanSettings() {
                   className="bg-secondary border-[hsl(var(--glass-border)/0.3)]"
                 />
                 <p className="text-xs text-muted-foreground">Used for location scoring in job matches</p>
+              </div>
+
+              {/* LinkedIn URL */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
+                  LinkedIn URL
+                </label>
+                <Input
+                  value={linkedinUrl}
+                  onChange={(e) => setLinkedinUrl(e.target.value)}
+                  placeholder="https://linkedin.com/in/your-profile"
+                  className="bg-secondary border-[hsl(var(--glass-border)/0.3)]"
+                />
+                <p className="text-xs text-muted-foreground">Used as the clickable link in your tailored CV</p>
               </div>
 
               {/* CV Upload */}

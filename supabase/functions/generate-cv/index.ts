@@ -177,15 +177,16 @@ Deno.serve(async (req) => {
 
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("cv_text, candidate_profile, full_name")
+      .select("cv_text, candidate_profile, full_name, linkedin_url")
       .eq("id", job.user_id)
       .single();
 
     const cvText = profile?.cv_text?.trim();
     if (!cvText) throw new Error("No CV found. Please upload your CV in Settings first.");
 
-    const linkedinMatch = cvText.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9\-_%]+\/?/i);
-    const linkedinUrl = linkedinMatch?.[0] ?? "";
+    // Prefer dedicated column; fall back to regex extraction from cv_text
+    const linkedinUrl = (profile as any)?.linkedin_url?.trim() ||
+      (cvText.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9\-_%]+\/?/i)?.[0] ?? "");
 
     const cp = profile?.candidate_profile || {};
     const candidateContext = [
