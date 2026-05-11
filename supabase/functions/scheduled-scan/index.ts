@@ -43,11 +43,11 @@ Deno.serve(async (req) => {
     body.mode === "scan" ? "scan" :
     autoMode;
 
-  // Get all users with Gmail connected
+  // Get all users with Gmail connected (vault_token_id is source of truth)
   const { data: profiles, error } = await supabase
     .from("user_profiles")
     .select("id")
-    .not("google_refresh_token", "is", null);
+    .not("vault_token_id", "is", null);
 
   if (error || !profiles || profiles.length === 0) {
     console.log("No users with Gmail connected:", error?.message);
