@@ -528,8 +528,8 @@ Candidate city: ${profile.city}
 - 0 pts: Different region or explicitly remote/WFH
 
 PRIORITY from score:
-- HIGH: 8-10
-- MEDIUM: 5-7
+- HIGH: 7-10
+- MEDIUM: 5-6
 - LOW: 2-4
 - REJECTED: 0-1
 
@@ -786,7 +786,7 @@ Deno.serve(async (req) => {
   for (const job of allScored) {
     if (job.priority === "REJECTED") {
       // Keep REJECTED — hard rejection rule was applied, score may still be > 0 for skills info
-    } else if (job.score >= 8) job.priority = "HIGH";
+    } else if (job.score >= 7) job.priority = "HIGH";
     else if (job.score >= 5) job.priority = "MEDIUM";
     else if (job.score >= 2) job.priority = "LOW";
     else job.priority = "REJECTED";

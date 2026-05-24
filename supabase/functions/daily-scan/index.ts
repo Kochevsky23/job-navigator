@@ -538,14 +538,14 @@ async function fetchLinkedInDescription(linkedinId: string): Promise<string | nu
     const markupMatch = html.match(/class="show-more-less-html__markup[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
     if (markupMatch) {
       const text = stripHtml(markupMatch[1]);
-      if (text.length > 100) return text.substring(0, 5000);
+      if (text.length > 100) return text.substring(0, 8000);
     }
 
     // Fallback: description section
     const sectionMatch = html.match(/<section[^>]*description[^>]*>([\s\S]*?)<\/section>/i);
     if (sectionMatch) {
       const text = stripHtml(sectionMatch[1]);
-      if (text.length > 100) return text.substring(0, 5000);
+      if (text.length > 100) return text.substring(0, 8000);
     }
 
     return null;
@@ -562,22 +562,22 @@ async function fetchCareersPageDescription(jobLink: string): Promise<string | nu
 
     // Try common job description containers
     const patterns = [
-      /class="[^"]*(?:job-description|jobDescription|job_description|description|posting-description)[^"]*"[^>]*>([\s\S]{200,5000}?)<\/(?:div|section|article)>/i,
-      /<(?:div|section|article)[^>]*id="[^"]*(?:description|job-detail)[^"]*"[^>]*>([\s\S]{200,5000}?)<\/(?:div|section|article)>/i,
+      /class="[^"]*(?:job-description|jobDescription|job_description|description|posting-description)[^"]*"[^>]*>([\s\S]{200,8000}?)<\/(?:div|section|article)>/i,
+      /<(?:div|section|article)[^>]*id="[^"]*(?:description|job-detail)[^"]*"[^>]*>([\s\S]{200,8000}?)<\/(?:div|section|article)>/i,
     ];
 
     for (const pattern of patterns) {
       const match = html.match(pattern);
       if (match) {
         const text = stripHtml(match[1]);
-        if (text.length > 150) return text.substring(0, 5000);
+        if (text.length > 150) return text.substring(0, 8000);
       }
     }
 
     // Generic fallback: strip full page and return first meaty block
     const stripped = stripHtml(html);
     const lines = stripped.split("\n").filter(l => l.trim().length > 40);
-    if (lines.length > 5) return lines.slice(0, 60).join("\n").substring(0, 5000);
+    if (lines.length > 5) return lines.slice(0, 80).join("\n").substring(0, 8000);
 
     return null;
   } catch {
@@ -641,7 +641,7 @@ Company: ${j.company}
 Role: ${j.role}
 Email exp label (UNRELIABLE): ${j.exp_required || "Not specified"}
 Description:
-${j.description.substring(0, 4000)}`
+${j.description.substring(0, 6000)}`
   ).join("\n\n---\n\n");
 
   const staticInstructions = `CRITICAL RULES (follow strictly):
@@ -772,7 +772,7 @@ Email Exp Label (unreliable): ${j.exp_required || "not specified"}
 Pre-extracted Experience Requirement: ${exp?.actual_exp_required || "Not specified"} (evidence: "${exp?.evidence || "n/a"}")
 Description Source: ${j.description_source}
 Job Description:
-${j.description.substring(0, 4000)}`;
+${j.description.substring(0, 6000)}`;
   }).join("\n\n---\n\n");
 
   const staticContent = `===== CANDIDATE PROFILE =====
@@ -819,8 +819,8 @@ Candidate city: ${profile.city}
 - 0 pts: Different region or explicitly remote/WFH
 
 PRIORITY from score:
-- HIGH: 8-10
-- MEDIUM: 5-7
+- HIGH: 7-10
+- MEDIUM: 5-6
 - LOW: 2-4
 - REJECTED: 0-1
 
@@ -942,7 +942,7 @@ async function scoreAllJobs(jobs: JobWithDescription[], profile: CandidateProfil
   for (const job of allScored) {
     if (job.priority === "REJECTED") {
       // Keep REJECTED — hard rejection rule was applied, score may still be > 0 for skills info
-    } else if (job.score >= 8) job.priority = "HIGH";
+    } else if (job.score >= 7) job.priority = "HIGH";
     else if (job.score >= 5) job.priority = "MEDIUM";
     else if (job.score >= 2) job.priority = "LOW";
     else job.priority = "REJECTED";
@@ -1234,6 +1234,19 @@ Deno.serve(async (req) => {
             .update({ low_confidence: true })
             .in("fingerprint", lowConfidenceFingerprints);
         } catch { /* non-critical — column may not be in schema cache yet */ }
+      }
+      // Cross-fingerprint dedup: when a linkedin:: job is inserted, delete any stale meta:: duplicate
+      // for the same company+role+location (occurs when same job was found via email without linkedin_id first)
+      const linkedinRows = rowsToUpsert.filter(r => r.fingerprint.startsWith("linkedin::"));
+      if (linkedinRows.length > 0) {
+        const metaFpsToDelete = linkedinRows.map(j =>
+          `meta::${(j.company || "").trim().toLowerCase()}__${(j.role || "").trim().toLowerCase()}__${(j.location || "").trim().toLowerCase()}`
+        );
+        const { count } = await supabase.from("jobs")
+          .delete({ count: "exact" })
+          .eq("user_id", userId)
+          .in("fingerprint", metaFpsToDelete);
+        if (count && count > 0) console.log(`[7] Cross-fp dedup: deleted ${count} stale meta:: duplicate(s)`);
       }
     }
 
