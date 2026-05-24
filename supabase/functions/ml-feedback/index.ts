@@ -67,13 +67,17 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ── Compute binary metrics ─────────────────────────────────────────────────
-    // AI positive = HIGH priority (score >= 8)
-    // User positive = user_score >= 4
+    // ── Compute binary metrics (HIGH threshold = score >= 7) ──────────────────
+    // User positive = user_score >= 4 (4-5★), negative = 1-2★, neutral 3★ skipped
     const TP = labeled.filter(j => j.user_score >= 4 && j.priority === "HIGH").length;
     const FP = labeled.filter(j => j.user_score <= 2 && j.priority === "HIGH").length;
     const FN = labeled.filter(j => j.user_score >= 4 && j.priority !== "HIGH").length;
     const TN = labeled.filter(j => j.user_score <= 2 && j.priority !== "HIGH").length;
+
+    // Also compute MEDIUM recall (how many 4★ liked jobs are at least MEDIUM)
+    const mediumTP = labeled.filter(j => j.user_score >= 4 && (j.priority === "HIGH" || j.priority === "MEDIUM")).length;
+    const mediumFN = labeled.filter(j => j.user_score >= 4 && j.priority !== "HIGH" && j.priority !== "MEDIUM").length;
+    const mediumRecall = mediumTP + mediumFN > 0 ? mediumTP / (mediumTP + mediumFN) : null;
 
     const precision = TP + FP > 0 ? TP / (TP + FP) : null;
     const recall = TP + FN > 0 ? TP / (TP + FN) : null;
@@ -82,35 +86,57 @@ Deno.serve(async (req) => {
     const accuracy = TP + TN + FP + FN > 0 ? (TP + TN) / (TP + TN + FP + FN) : null;
 
     console.log(`[ml-feedback] Labeled: ${labeled.length} | TP:${TP} FP:${FP} FN:${FN} TN:${TN}`);
-    console.log(`[ml-feedback] Precision:${precision?.toFixed(2)} Recall:${recall?.toFixed(2)} F1:${f1?.toFixed(2)} Accuracy:${accuracy?.toFixed(2)}`);
+    console.log(`[ml-feedback] P:${precision?.toFixed(2)} R:${recall?.toFixed(2)} F1:${f1?.toFixed(2)} Acc:${accuracy?.toFixed(2)} MedR:${mediumRecall?.toFixed(2)}`);
 
-    // ── Build FP and FN lists for Claude ──────────────────────────────────────
+    // ── Build job lists for Claude ─────────────────────────────────────────────
     const fpJobs = labeled.filter(j => j.user_score <= 2 && j.priority === "HIGH");
     const fnJobs = labeled.filter(j => j.user_score >= 4 && j.priority !== "HIGH");
     const tpJobs = labeled.filter(j => j.user_score >= 4 && j.priority === "HIGH").slice(0, 5);
+    // FN breakdown by priority bucket
+    const fnByPriority = {
+      MEDIUM: fnJobs.filter(j => j.priority === "MEDIUM").length,
+      LOW: fnJobs.filter(j => j.priority === "LOW").length,
+      REJECTED: fnJobs.filter(j => j.priority === "REJECTED").length,
+    };
 
     const formatJob = (j: any) =>
-      `- ${j.company} | ${j.role} | ${j.location} | exp: ${j.exp_required || "?"} | AI score: ${j.score} | AI priority: ${j.priority} | User rating: ${j.user_score}★\n  AI reason: ${(j.reason || "").substring(0, 200)}`;
+      `- ${j.company} | ${j.role} | ${j.location} | exp: ${j.exp_required || "?"} | score: ${j.score} | priority: ${j.priority} | user: ${j.user_score}★\n  reason: ${(j.reason || "").substring(0, 250)}`;
 
     const fpSection = fpJobs.length > 0
-      ? `FALSE POSITIVES (AI said HIGH, user disliked — AI overscored):\n${fpJobs.map(formatJob).join("\n")}`
+      ? `FALSE POSITIVES (AI=HIGH, user disliked 1-2★ — AI overscored):\n${fpJobs.map(formatJob).join("\n")}`
       : "FALSE POSITIVES: none";
 
     const fnSection = fnJobs.length > 0
-      ? `FALSE NEGATIVES (AI didn't say HIGH, user liked — AI missed):\n${fnJobs.map(formatJob).join("\n")}`
+      ? `FALSE NEGATIVES (AI≠HIGH, user liked 4-5★ — AI missed):\nBreakdown: MEDIUM=${fnByPriority.MEDIUM}, LOW=${fnByPriority.LOW}, REJECTED=${fnByPriority.REJECTED}\n${fnJobs.slice(0, 20).map(formatJob).join("\n")}`
       : "FALSE NEGATIVES: none";
 
     const tpSection = tpJobs.length > 0
-      ? `TRUE POSITIVES (AI said HIGH AND user liked — correct):\n${tpJobs.map(formatJob).join("\n")}`
+      ? `TRUE POSITIVES sample (AI=HIGH AND user liked — correct):\n${tpJobs.map(formatJob).join("\n")}`
       : "";
 
-    const prompt = `You are analyzing AI scoring errors for a job search tool. The AI scores jobs 0-10 (HIGH=8+, MEDIUM=5-7, LOW=2-4, REJECTED<2) for ${candidateDesc}.
+    // Load previous hints to avoid duplication
+    const { data: profileRow2 } = await supabase
+      .from("user_profiles")
+      .select("scoring_feedback")
+      .eq("id", userId)
+      .single();
+    const prevHints: string = (profileRow2 as any)?.scoring_feedback?.scoring_hints || "";
+    const prevHintsSection = prevHints
+      ? `\nPREVIOUS SCORING HINTS (already applied — do NOT repeat, only add NEW insights):\n${prevHints.substring(0, 400)}`
+      : "";
 
-Scoring factors:
-- Factor 1: Skills match (0-3 pts)
-- Factor 2: Experience level fit (0-5 pts) — PRIMARY
-- Factor 3: Field relevance (0-1 pt)
+    const prompt = `You are analyzing AI scoring accuracy for a job-search tool. The AI scores jobs 0-10 (HIGH=7-10, MEDIUM=5-6, LOW=2-4, REJECTED=0-1) for ${candidateDesc}.
+
+Current scoring factors:
+- Factor 1: Skills match (0-2 pts)
+- Factor 2: Experience level fit (0-4 pts) — PRIMARY
+- Factor 3: Field & domain relevance (0-1 pt)
 - Factor 4: Location fit (0-1 pt)
+- Factor 5: Language match (0-1 pt)
+- Factor 6: Job type alignment (0-1 pt)
+
+Metrics this run: Precision=${precision != null ? (precision*100).toFixed(0)+"%" : "N/A"} | Recall=${recall != null ? (recall*100).toFixed(0)+"%" : "N/A"} | F1=${f1 != null ? (f1*100).toFixed(0)+"%" : "N/A"} | MEDIUM+HIGH recall=${mediumRecall != null ? (mediumRecall*100).toFixed(0)+"%" : "N/A"}
+${prevHintsSection}
 
 ${fpSection}
 
@@ -118,18 +144,18 @@ ${fnSection}
 
 ${tpSection}
 
-Task:
-1. Analyze what patterns explain the false positives and false negatives.
-2. Write a SHORT "insights" summary (2-3 sentences, specific, no generic advice).
-3. Write "scoring_hints" — specific adjustments to inject into the scoring prompt. These MUST be actionable rules that change how scores are assigned. Be concrete: name specific role types, skills, company types. Max 200 words.
+Tasks:
+1. Identify specific patterns in the errors — name actual companies, role types, domains, exp levels that are systematically wrong.
+2. Write "insights": 3-4 sentences, concrete and specific. Include whether the main issue is precision (too many FP) or recall (too many FN) and WHY.
+3. Write "scoring_hints": NEW actionable calibration rules only (no repeats from previous hints). Format as bullet list. Max 250 words. Name specific companies, role keywords, skill gaps, or domain patterns observed. Each bullet must change how a specific type of job gets scored.
 
-Format scoring_hints as a bullet list starting with:
-"CALIBRATION FROM USER FEEDBACK (apply these adjustments):"
+Format scoring_hints starting with:
+"CALIBRATION FROM USER FEEDBACK (run ${new Date().toISOString().slice(0,10)}):"
 
 Return ONLY valid JSON:
 {
   "insights": "...",
-  "scoring_hints": "CALIBRATION FROM USER FEEDBACK (apply these adjustments):\\n- ..."
+  "scoring_hints": "CALIBRATION FROM USER FEEDBACK (run ${new Date().toISOString().slice(0,10)}):\\n- ..."
 }`;
 
     const claudeResp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -140,8 +166,8 @@ Return ONLY valid JSON:
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1500,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -161,16 +187,21 @@ Return ONLY valid JSON:
     } catch {
       console.error("[ml-feedback] Claude JSON parse failed:", rawText);
       insights = "Could not analyze patterns.";
-      scoringHints = "";
+      scoringHints = prevHints; // keep previous hints on failure
     }
+
+    // Append new hints to previous (keep last 2 runs, cap at 600 chars total)
+    const combinedHints = prevHints && scoringHints && scoringHints !== prevHints
+      ? [prevHints, scoringHints].join("\n\n").substring(0, 600)
+      : scoringHints || prevHints;
 
     // ── Store in user_profiles ─────────────────────────────────────────────────
     const scoringFeedback = {
       last_updated: new Date().toISOString(),
       labeled_count: labeled.length,
-      metrics: { precision, recall, f1, accuracy, TP, FP, TN, FN },
+      metrics: { precision, recall, f1, accuracy, mediumRecall, TP, FP, TN, FN },
       insights,
-      scoring_hints: scoringHints,
+      scoring_hints: combinedHints,
     };
 
     await supabase
@@ -178,9 +209,9 @@ Return ONLY valid JSON:
       .update({ scoring_feedback: scoringFeedback })
       .eq("id", userId);
 
-    console.log(`[ml-feedback] Done. Insights: ${insights.substring(0, 100)}`);
+    console.log(`[ml-feedback] Done. P:${precision?.toFixed(2)} R:${recall?.toFixed(2)} F1:${f1?.toFixed(2)}`);
 
-    return new Response(JSON.stringify({ success: true, metrics: scoringFeedback.metrics, insights, scoring_hints: scoringHints }), {
+    return new Response(JSON.stringify({ success: true, metrics: scoringFeedback.metrics, insights, scoring_hints: combinedHints }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 

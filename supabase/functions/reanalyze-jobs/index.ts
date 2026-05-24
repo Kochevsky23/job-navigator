@@ -53,128 +53,137 @@ interface ExperienceExtraction {
 function buildFactor2Examples(profile: CandidateProfile): string {
   const level = profile.experience_level;
   if (level === "student" || level === "fresh_graduate") {
-    return `- 5 pts: Job targets exactly this level (student/intern role, "Student program", "Trainee")
-- 4 pts: One step away (entry-level/graduate role, "0-1 year", "Fresh graduate")
-- 3 pts: Near fit with manageable gap (junior role, "Entry/Junior")
-- 2 pts: Level not stated anywhere — uncertain
-- 1 pt: Clear gap (1-3 years required)
-- 0 pts: Major mismatch — apply hard rejection rules above`;
+    return `- 4 pts: Job explicitly targets student/intern/trainee level ("Student program", "Trainee", "Intern", "Student position", "סטודנט")
+- 3 pts: Entry-level/graduate role ("Entry level", "Graduate", "0-1 year", "Fresh graduate", "No experience required")
+- 2 pts: Junior role ("Junior", "Entry/Junior") — near fit, ~1yr gap acceptable
+- 1 pt: Level not stated anywhere — treat conservatively (cannot confirm student-appropriate)
+- 0 pts: Any explicit years required OR Mid-level label → apply hard rejection rules above`;
   }
   if (level === "junior") {
-    return `- 5 pts: Job targets exactly this level (junior/1-3 year role)
-- 4 pts: Entry-level role (slight over-qualification, still good)
-- 3 pts: Mid-level or "junior-mid" role (manageable gap)
-- 2 pts: Level not stated anywhere — uncertain
-- 1 pt: Clear gap (4-5 years required)
-- 0 pts: Major mismatch — apply hard rejection rules above`;
+    return `- 4 pts: Job targets junior/1-3yr level ("Junior", "1-3 years", "1-2 years", "Entry/Junior")
+- 3 pts: Entry-level role ("Entry", "Graduate", "0-1 year") — slight over-qualification, still good
+- 2 pts: Mid-level or junior-mid ("Mid", "2-4 years", "3 years") — manageable stretch
+- 1 pt: Level not stated anywhere — treat conservatively
+- 0 pts: 4+ years clearly required → apply hard rejection rules above`;
   }
   if (level === "mid") {
-    return `- 5 pts: Job targets exactly this level (mid-level/3-5 year role)
-- 4 pts: Junior-mid or "3+ years" (good fit)
-- 3 pts: Senior or "5-7 years" (manageable stretch)
-- 2 pts: Level not stated anywhere — uncertain
-- 1 pt: Significant gap (8+ years required) or junior-only (over-qualified)
-- 0 pts: Major mismatch — apply hard rejection rules above`;
+    return `- 4 pts: Job targets mid-level exactly ("Mid", "Mid-level", "3-5 years", "4 years", "4+ years")
+- 3 pts: Junior-mid / "3+ years" / "2-4 years" — good fit
+- 2 pts: Senior / "5-7 years" / "5+ years" — stretch; OR over-qualified (junior/entry role)
+- 1 pt: Level not stated anywhere — uncertain
+- 0 pts: Student-only OR 8+ years required → apply hard rejection rules above`;
   }
   if (level === "senior") {
-    return `- 5 pts: Job targets exactly this level (senior/lead/6+ year role)
-- 4 pts: Mid-senior or "5+ years" (good fit)
-- 3 pts: Mid-level (slight under-targeting, may still fit)
-- 2 pts: Level not stated anywhere — uncertain
-- 1 pt: Junior/entry-only (over-qualified)
-- 0 pts: Student-only internship — apply hard rejection rules above`;
+    return `- 4 pts: Job targets senior/lead level ("Senior", "Lead", "6+ years", "7+ years", "5-8 years")
+- 3 pts: Mid-senior / "5+ years" / "4-6 years" — good fit
+- 2 pts: Mid-level / "3-5 years" — slightly under-targeting
+- 1 pt: Level not stated OR over-qualified (junior/entry only)
+- 0 pts: Student-only internship → apply hard rejection rules above`;
   }
-  return `- 5 pts: Job targets exactly the candidate's level
-- 4 pts: One step away
-- 3 pts: Near fit with manageable gap
-- 2 pts: Level not stated anywhere — uncertain
-- 1 pt: Clear gap
+  return `- 4 pts: Job targets exactly the candidate's level
+- 3 pts: One step away — good fit
+- 2 pts: Near fit with manageable gap
+- 1 pt: Level not stated — uncertain
 - 0 pts: Major mismatch — apply hard rejection rules above`;
 }
 
 function buildHardRejectionRules(profile: CandidateProfile): string {
+  const universalRules = `UNIVERSAL HARD REJECTIONS (apply to ALL experience levels, zero exceptions):
+U1. Job mandates a language the candidate does NOT have — e.g. "Arabic required", "French mandatory", "German fluency required" — and candidate languages are only: ${profile.languages.join(", ")} → FACTOR 5 = 0; if language is clearly non-negotiable → priority MUST be REJECTED
+U2. Job explicitly requires an active professional license/certification that requires years of work to obtain (CPA, CFA, Bar exam, PE license, PMP, Actuary qualification, Medical license) → priority MUST be REJECTED for student/fresh_graduate; for others cap score at 4
+U3. Job explicitly states "active security clearance required" and there is no indication the candidate has one → cap hiring_probability at 2
+U4. Description is extremely vague or very short (under 150 meaningful characters after removing boilerplate) → cap total score at 5 — cannot reliably assess fit`;
+
   if (profile.experience_level === "student" || profile.experience_level === "fresh_graduate") {
     const levelDesc = profile.experience_level === "student"
       ? "student (currently enrolled, 0-1 year experience, not yet graduated)"
       : "fresh graduate (recently graduated, <1 year work experience)";
     return `HARD REJECTION RULES (MANDATORY — apply BEFORE scoring, zero exceptions):
 
-EXPERIENCE-BASED REJECTIONS — priority MUST be REJECTED, but still score the other factors:
-1. Job explicitly requires 3+ years of experience → priority MUST be REJECTED. Still evaluate FACTOR 1 (skills), FACTOR 3 (field), FACTOR 4 (location) normally. Set FACTOR 2 = 0 (experience mismatch). Cap total score at 4.
-3. exp_required contains "Mid-level", "Mid level", "Mid", "mid-level", "mid level" (as experience label) → priority MUST be REJECTED. Still evaluate FACTOR 1, FACTOR 3, FACTOR 4 normally. Set FACTOR 2 = 0. Cap total score at 4.
+${universalRules}
 
-TITLE/DOMAIN REJECTIONS — score MUST be 0, no need to evaluate further:
-2. Job title contains Senior / Lead / Principal / Director / Head / VP / Architect / Chief → score MUST be 0, priority MUST be REJECTED
-2b. Job title contains "Manager" AND exp_required is Mid-level, Senior, or requires 3+ years → score MUST be 0, priority MUST be REJECTED (Exception: "Project Manager", "Product Manager", or similar manager roles targeting juniors/entry-level are allowed — evaluate exp_required to decide)
-4. Job requires domain expertise in a field completely unrelated to the candidate's education (${profile.education_field}) and domains (${profile.domains.join(", ")}) — e.g. a pure legal, medical, or civil engineering role for someone in ${profile.education_field} → score MUST be 0-1, priority MUST be REJECTED
+STUDENT/FRESH-GRADUATE SPECIFIC REJECTIONS:
+S1. Job explicitly requires 3+ years of experience → priority MUST be REJECTED. Still score FACTOR 1, FACTOR 3, FACTOR 4, FACTOR 5, FACTOR 6. Set FACTOR 2 = 0. Cap total score at 4.
+S2. exp_required contains "Mid-level", "Mid level", "Mid" (as experience label) → priority MUST be REJECTED. Set FACTOR 2 = 0. Cap total score at 4.
+S3. Job title contains Senior / Lead / Principal / Director / Head / VP / Architect / Chief → score MUST be 0, priority MUST be REJECTED
+S4. Job title contains "Manager" AND exp_required is Mid-level, Senior, or requires 3+ years → score MUST be 0, priority MUST be REJECTED (Exception: "Project Manager" / "Product Manager" targeting entry-level — check exp_required)
+S5. Description explicitly says "no students", "students are not eligible", "must be a current employee", "not suitable for students" → score MUST be 0, priority MUST be REJECTED
+S6. Job domain completely unrelated to candidate's education (${profile.education_field}) and domains (${profile.domains.join(", ")}) → score MUST be 0-1, priority MUST be REJECTED
 
-EXPERIENCE LEVEL FIT — MANDATORY SCORING GUIDE FOR ${profile.experience_level.toUpperCase().replace("_", " ")}:
-Use these rules to score FACTOR 2. This candidate is a ${levelDesc}:
-- exp_required explicitly says "Student", "Intern", "Trainee", "Student/Intern", "Student level", "Student program" → FACTOR 2 = 5 pts (perfect fit)
-- exp_required says "Entry level", "Entry", "Graduate", "0-1 year", "Fresh graduate" → FACTOR 2 = 4 pts (excellent fit)
-- exp_required says "Junior", "Entry/Junior", "Entry to junior", "Entry-to-junior" → FACTOR 2 = 3 pts (near fit, 1 year gap)
-- exp_required says "Not specified" or is unclear → FACTOR 2 = 2 pts (treat conservatively — cannot confirm ${profile.experience_level}-appropriate)
-- exp_required says "1-2 years", "1-3 years", "2+ years", "Junior-Mid", "Junior to mid", "Entry-to-mid", "Entry to mid", "entry to mid level" → FACTOR 2 = 1 pt (clear gap)
-- 3+ years, Mid-level → FACTOR 2 = 0 pts (see hard rejection above)
+EXPERIENCE LEVEL FIT — FACTOR 2 SCORING GUIDE FOR ${profile.experience_level.toUpperCase().replace("_", " ")} (0-4 pts):
+This candidate is a ${levelDesc}:
+- 4 pts: Job explicitly targets student/intern/trainee ("Student program", "Trainee", "Intern", "Student position")
+- 3 pts: Entry-level/graduate role ("Entry level", "Graduate", "0-1 year", "Fresh graduate", "No experience required")
+- 2 pts: Junior role ("Junior", "Entry/Junior") — near fit, ~1yr gap acceptable
+- 1 pt: Level not stated anywhere — treat conservatively
+- 0 pts: Any explicit years required OR Mid-level label → see rejections above
 
-SCORE CAPS (apply after scoring, before final output):
-- If exp_required is "Junior", "Entry/Junior" → cap total score at 7 (MEDIUM max). ${profile.experience_level === "student" ? "Student" : "Fresh graduate"} targeting junior role is a near-fit but not HIGH priority.
-- If job location is clearly more than 40km from ${profile.city} → FACTOR 4 = 0 pts AND cap total score at 7 (MEDIUM max).`;
+SCORE CAPS (apply after factor sum):
+- If exp_required is "Junior" / "Entry/Junior" → cap total score at 7 (cannot be HIGH for ${profile.experience_level})
+- If job location is clearly more than 40km from ${profile.city} → FACTOR 4 = 0 AND cap total score at 7`;
   }
   if (profile.experience_level === "junior") {
     return `HARD REJECTION RULES (MANDATORY — zero exceptions):
-1. Job explicitly requires 5+ years → score MUST be 0, priority MUST be REJECTED
-2. Job title contains Director / VP / Head / C-level / Chief → score MUST be 0, priority MUST be REJECTED
-3. Job requires domain expertise completely unrelated to the candidate's education (${profile.education_field}) and domains (${profile.domains.join(", ")}) → score MUST be 0-1, priority MUST be REJECTED
 
-EXPERIENCE LEVEL FIT — MANDATORY SCORING GUIDE FOR JUNIOR:
-Use these rules to score FACTOR 2. This candidate is a junior (1-3 years full-time experience):
-- exp_required "Junior", "1-3 years", "1-2 years", "2 years", "Entry/Junior", "Entry-to-junior" → FACTOR 2 = 5 pts (perfect fit)
-- exp_required "Entry", "Entry-level", "Graduate", "0-1 year", "Fresh graduate" → FACTOR 2 = 4 pts (good fit, slight over-qualification)
-- exp_required "Mid", "Mid-level", "Junior-Mid", "2-4 years", "3 years" → FACTOR 2 = 3 pts (near fit, manageable gap)
-- exp_required "Not specified" or is unclear → FACTOR 2 = 2 pts (conservative)
-- exp_required "4-5 years" → FACTOR 2 = 1 pt (clear gap)
-- 5+ years → FACTOR 2 = 0 pts (see hard rejection above)
+${universalRules}
 
-SCORE CAPS (apply after scoring, before final output):
-- If job location is clearly more than 40km from ${profile.city} → FACTOR 4 = 0 pts AND cap total score at 7 (MEDIUM max).`;
+JUNIOR-SPECIFIC REJECTIONS:
+J1. Job explicitly requires 5+ years → score MUST be 0, priority MUST be REJECTED
+J2. Job title contains Director / VP / Head / C-level / Chief → score MUST be 0, priority MUST be REJECTED
+J3. Job domain completely unrelated to candidate's education (${profile.education_field}) and domains (${profile.domains.join(", ")}) → score MUST be 0-1, priority MUST be REJECTED
+
+EXPERIENCE LEVEL FIT — FACTOR 2 SCORING GUIDE FOR JUNIOR (0-4 pts):
+This candidate is a junior (1-3 years full-time experience):
+- 4 pts: Job targets junior/1-3yr level ("Junior", "1-3 years", "1-2 years", "Entry/Junior", "Entry-to-junior")
+- 3 pts: Entry-level/graduate role ("Entry", "0-1 year", "Fresh graduate") — slight over-qualification, still good
+- 2 pts: Mid-level / junior-mid ("Mid", "Junior-Mid", "2-4 years", "3 years") — manageable stretch
+- 1 pt: Level not stated anywhere — treat conservatively
+- 0 pts: 4+ years clearly required → see rejection J1
+
+SCORE CAPS:
+- If job location is clearly more than 40km from ${profile.city} → FACTOR 4 = 0 AND cap total score at 7`;
   }
   if (profile.experience_level === "mid") {
     return `HARD REJECTION RULES (MANDATORY — zero exceptions):
-1. Job title contains VP / C-level / Chief → score MUST be 0, priority MUST be REJECTED
-2. Student-only internship → score MUST be 0-1, priority MUST be REJECTED
-3. Job requires domain expertise completely unrelated to the candidate's education (${profile.education_field}) and domains (${profile.domains.join(", ")}) → score MUST be 0-1, priority MUST be REJECTED
 
-EXPERIENCE LEVEL FIT — MANDATORY SCORING GUIDE FOR MID-LEVEL:
-Use these rules to score FACTOR 2. This candidate is a mid-level (3-6 years full-time experience):
-- exp_required "Mid", "Mid-level", "3-5 years", "4 years", "4+ years", "3-4 years" → FACTOR 2 = 5 pts (perfect fit)
-- exp_required "Junior-Mid", "Junior to mid", "3+ years", "2-4 years" → FACTOR 2 = 4 pts (good fit)
-- exp_required "Senior", "5-7 years", "5+ years" → FACTOR 2 = 3 pts (stretch, manageable)
-- exp_required "Not specified" → FACTOR 2 = 2 pts (uncertain)
-- exp_required "Junior", "Entry", "Entry-level", "1-2 years" → FACTOR 2 = 2 pts (over-qualified, may still be ok)
-- 8+ years required → FACTOR 2 = 1 pt (significant gap)
-- Student-only → FACTOR 2 = 0 pts (see hard rejection above)
+${universalRules}
 
-SCORE CAPS (apply after scoring, before final output):
-- If job location is clearly more than 40km from ${profile.city} → FACTOR 4 = 0 pts AND cap total score at 7 (MEDIUM max).`;
+MID-LEVEL SPECIFIC REJECTIONS:
+M1. Job title contains VP / C-level / Chief → score MUST be 0, priority MUST be REJECTED
+M2. Student-only internship → score MUST be 0-1, priority MUST be REJECTED
+M3. Job domain completely unrelated to candidate's education (${profile.education_field}) and domains (${profile.domains.join(", ")}) → score MUST be 0-1, priority MUST be REJECTED
+
+EXPERIENCE LEVEL FIT — FACTOR 2 SCORING GUIDE FOR MID-LEVEL (0-4 pts):
+This candidate is mid-level (3-6 years full-time experience):
+- 4 pts: Job targets mid-level exactly ("Mid", "Mid-level", "3-5 years", "4 years", "4+ years")
+- 3 pts: Junior-mid / "3+ years" / "2-4 years" — good fit
+- 2 pts: Senior / "5-7 years" — stretch; OR over-qualified (junior/entry role)
+- 1 pt: Level not stated anywhere — uncertain
+- 0 pts: Student-only OR 8+ years required → see rejections above
+
+SCORE CAPS:
+- If job location is clearly more than 40km from ${profile.city} → FACTOR 4 = 0 AND cap total score at 7`;
   }
   if (profile.experience_level === "senior") {
     return `HARD REJECTION RULES (MANDATORY — zero exceptions):
-1. C-level roles (CEO, CTO, COO, CFO, etc.) unless the description explicitly targets senior IC or director-level → score MUST be 0, priority MUST be REJECTED
-2. Student-only / intern-only positions → score MUST be 0-1, priority MUST be REJECTED
-3. Job requires domain expertise completely unrelated to the candidate's education (${profile.education_field}) and domains (${profile.domains.join(", ")}) → score MUST be 0-1, priority MUST be REJECTED
 
-EXPERIENCE LEVEL FIT — MANDATORY SCORING GUIDE FOR SENIOR:
-Use these rules to score FACTOR 2. This candidate is a senior (6+ years full-time experience):
-- exp_required "Senior", "Lead", "6+ years", "7+ years", "8 years", "5-8 years" → FACTOR 2 = 5 pts (perfect fit)
-- exp_required "Mid-Senior", "5+ years", "5-7 years", "4-6 years" → FACTOR 2 = 4 pts (good fit)
-- exp_required "Mid", "3-5 years", "Mid-level" → FACTOR 2 = 3 pts (slightly under-targeting, may still apply)
-- exp_required "Not specified" → FACTOR 2 = 2 pts (uncertain)
-- exp_required "Junior", "Entry", "Entry-level", "1-2 years" → FACTOR 2 = 1 pt (over-qualified)
-- Student-only → FACTOR 2 = 0 pts (see hard rejection above)
+${universalRules}
 
-SCORE CAPS (apply after scoring, before final output):
-- If job location is clearly more than 40km from ${profile.city} → FACTOR 4 = 0 pts AND cap total score at 7 (MEDIUM max).`;
+SENIOR-SPECIFIC REJECTIONS:
+SR1. C-level roles (CEO, CTO, COO, CFO, etc.) unless description explicitly targets senior IC or director-level → score MUST be 0, priority MUST be REJECTED
+SR2. Student-only / intern-only positions → score MUST be 0-1, priority MUST be REJECTED
+SR3. Job domain completely unrelated to candidate's education (${profile.education_field}) and domains (${profile.domains.join(", ")}) → score MUST be 0-1, priority MUST be REJECTED
+
+EXPERIENCE LEVEL FIT — FACTOR 2 SCORING GUIDE FOR SENIOR (0-4 pts):
+This candidate is senior (6+ years full-time experience):
+- 4 pts: Job targets senior/lead level ("Senior", "Lead", "6+ years", "7+ years", "5-8 years")
+- 3 pts: Mid-senior / "5+ years" / "4-6 years" — good fit
+- 2 pts: Mid-level / "3-5 years" — slightly under-targeting
+- 1 pt: Level not stated OR over-qualified (junior/entry only)
+- 0 pts: Student-only → see rejection SR2
+
+SCORE CAPS:
+- If job location is clearly more than 40km from ${profile.city} → FACTOR 4 = 0 AND cap total score at 7`;
   }
   return "";
 }
@@ -504,28 +513,37 @@ Use the Pre-extracted Experience Requirement as your actual_exp_required in the 
 
 STEP 2 — Apply hard rejection rules using the pre-extracted actual_exp_required, NOT the email label.
 
-STEP 3 — For jobs NOT hard-rejected, score out of 10 using the job description to evaluate each factor:
+STEP 3 — For jobs NOT hard-rejected, score out of 10 using ALL six factors below.
+Total max = 10 pts (2+4+1+1+1+1). Sum the factors, apply any caps, output as integer 0-10.
 
-FACTOR 1 — SKILLS MATCH (0-3 pts)
-Read the job description and identify what skills/tools are required. Then check how many the candidate has.
-- 3 pts: 80%+ of requirements covered by candidate's skills
-- 2 pts: 50-79% covered
-- 1 pt: 25-49% covered
-- 0 pts: <25% covered — most required skills missing
-Only count skills listed in the candidate profile. Do not infer.
+FACTOR 1 — SKILLS MATCH (0-2 pts)
+Identify ALL required skills/tools in the JD. Compare against candidate's explicit skill list only — do not infer.
+- 2 pts: 70%+ of required skills covered
+- 1 pt: 35-69% covered
+- 0 pts: <35% covered — critical skills missing
 
-FACTOR 2 — EXPERIENCE LEVEL FIT (0-5 pts) — PRIMARY FACTOR
-This is the most important factor. Seniority mismatch is a hard blocker regardless of skills.
+FACTOR 2 — EXPERIENCE LEVEL FIT (0-4 pts) — PRIMARY FACTOR
+Seniority mismatch is the strongest signal. Use the pre-extracted experience requirement.
 ${buildFactor2Examples(profile)}
 
-FACTOR 3 — FIELD RELEVANCE (0-1 pt)
-- 1 pt: Job domain matches candidate's domains or education
-- 0 pts: Unrelated
+FACTOR 3 — FIELD & DOMAIN RELEVANCE (0-1 pt)
+- 1 pt: Job domain, industry, or required education field aligns with candidate's domains (${profile.domains.join(", ")}) or education (${profile.education_field})
+- 0 pts: Completely unrelated field/domain
 
 FACTOR 4 — LOCATION FIT (0-1 pt)
 Candidate city: ${profile.city}
-- 1 pt: Same city, commutable (~40 km), or same metro
-- 0 pts: Different region or explicitly remote/WFH
+- 1 pt: Same city, commutable (~40 km radius), or same metro area
+- 0 pts: Different region, requires relocation, or explicitly remote-only (no hybrid option)
+
+FACTOR 5 — LANGUAGE MATCH (0-1 pt)
+Candidate languages: ${profile.languages.join(", ")}
+- 1 pt: All mandatory languages in the job are in the candidate's list — OR — job has no specific language requirement beyond standard Hebrew/English
+- 0 pts: Job mandates a language the candidate does not have (see Universal Rule U1)
+
+FACTOR 6 — JOB TYPE & ROLE ALIGNMENT (0-1 pt)
+Candidate seeking: ${profile.job_type}
+- 1 pt: Role type matches candidate preference; OR title/description explicitly targets student/intern/graduate/entry-level when candidate IS a student
+- 0 pts: Clear mismatch (full-time senior role when seeking internship, or vice versa)
 
 PRIORITY from score:
 - HIGH: 7-10
@@ -533,27 +551,32 @@ PRIORITY from score:
 - LOW: 2-4
 - REJECTED: 0-1
 
-HIRING PROBABILITY (0-10) — Realistic chance of getting a recruiter response:
-- Experience fit: perfect level match +3, acceptable gap +1, large gap -3
-- Company prestige barrier: Big tech (Google/Meta/Amazon/Apple/Microsoft/Nvidia) for student/junior = max 4; mid-size tech = up to 7; startups/SMBs = up to 9
-- Junior-friendliness: explicit "student"/"graduate"/"entry-level" language +2; no junior signals at senior-heavy company -2
+HIRING PROBABILITY (0-10) — Realistic chance of getting a recruiter response. Assess ALL signals:
+- Experience level fit: perfect match +3, one step off +1, significant gap -3
+- Company prestige barrier: FAANG/Nvidia/Bloomberg for student/junior = max 4; large Israeli tech = up to 6; mid-size = up to 8; startups/SMBs = up to 9
+- Explicit junior-friendliness: "student position", "graduate", "training provided", "no experience required" +2; senior-heavy company with no junior signals -2
 - Skills overlap: strong technical match +2; weak match -2
-- Role clarity: clear specific JD = easier to target (higher); vague JD = lower
-Scale: 9-10=excellent shot, 7-8=good chance, 5-6=possible but competitive, 3-4=long shot, 1-2=very unlikely, 0=essentially impossible
+- Application accessibility: LinkedIn Easy Apply or simple process +1; heavy multi-stage process mentioned -1
+- Competition signal: "highly competitive" or ">200 applicants" mentioned -2; niche/specific role +1
+- Role specificity: clear specific JD = targetable +1; vague catch-all JD -1
+- Certification/clearance barrier: requires license or clearance candidate clearly lacks -3
+Scale: 9-10=excellent shot, 7-8=good chance, 5-6=possible, 3-4=long shot, 1-2=very unlikely, 0=impossible
 
-AI REPLACEABILITY RISK — How automatable is this role in the next 3-5 years?
-- High: primarily manual reporting, data entry, Excel copy-paste, ERP ticketing, basic ops coordination
-- Medium: business analyst, generalist ops, standard BI reporting, coordinator roles
-- Low: data engineering, ML/AI roles, automation builder, product analytics, technical roles requiring judgment or creativity
+AI REPLACEABILITY RISK (Low/Medium/High) — How automatable is this role in the next 3-5 years?
+- High: manual reporting, data entry, Excel copy-paste, ERP ticketing, scheduling, basic admin/ops, call center, simple QA, repetitive finance ops
+- Medium: business analyst (non-technical), generalist ops, standard BI dashboarding, coordinator, basic HR/recruiting, account management
+- Low: data engineering, ML/AI, automation builder, product analytics, software dev, technical design, roles needing complex judgment or creativity
+When in doubt → Medium.
 
-REASON — 5 sentences, strategic and specific:
-1. Skills: which specific tools/skills from the profile match the JD requirements (name them)
-2. Gap: main missing skill or experience concern
-3. Strategic value: why this role does or doesn't compound the candidate's skills and career trajectory
-4. Hiring probability: one sentence explaining the probability score (company type, experience fit, competition level)
-5. Verdict: clear final recommendation
+REASON — 6 sentences, strategic and specific (no generic filler):
+1. Skills match: name the specific tools/skills from the profile that match the JD (e.g. "SQL, Python, Power BI align with the JD requirements")
+2. Gap: the single most important missing skill, experience, or requirement concern
+3. Strategic value: does this role compound the candidate's skills and career trajectory — or is it a dead-end/mismatch?
+4. Hiring probability rationale: company type + experience fit + competition level in one sentence
+5. Prerequisites check: any language, certification, job-type, or location concern worth flagging
+6. Verdict: one clear final recommendation (apply / skip / apply-if-nothing-better)
 
-Be specific. Name actual tools and cities. No generic sentences.
+Be specific. Name actual tools, companies, cities. Zero generic sentences.
 
 ${scoringHints ? `\n${scoringHints}\n` : ""}
 Return ONLY valid JSON. ASCII only — no Hebrew, no special quotes, no newlines inside strings:
