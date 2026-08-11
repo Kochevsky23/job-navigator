@@ -434,7 +434,7 @@ ${emailContent}
         "x-api-key": Deno.env.get("CLAUDE_API_KEY")!,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 4096, messages: [{ role: "user", content: prompt }] }),
+      body: JSON.stringify({ model: "claude-sonnet-5", thinking: { type: "disabled" }, max_tokens: 4096, messages: [{ role: "user", content: prompt }] }),
     });
     data = await resp.json();
     if (data.content?.[0]?.text) break;
@@ -444,8 +444,12 @@ ${emailContent}
     }
   }
   if (!data.content?.[0]?.text) {
-    console.error(`[extract] Claude error after 3 attempts: type=${data.type}, error=${JSON.stringify(data.error)}, stop=${data.stop_reason}`);
-    throw new Error("Claude returned no content in extraction after 3 attempts");
+    // Put the actual API error in the thrown message — it used to go only to
+    // console.error, so callers saw "no content" with no way to tell a credit
+    // problem from a bad model ID from a transient overload.
+    const detail = data?.error?.message || `type=${data?.type}, stop=${data?.stop_reason}`;
+    console.error(`[extract] Claude error after 3 attempts: ${JSON.stringify(data?.error ?? data)}`);
+    throw new Error(`Claude extraction failed after 3 attempts: ${detail}`);
   }
 
   const text = data.content[0].text;
@@ -476,7 +480,8 @@ ${emailContent}
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
+        thinking: { type: "disabled" },
         max_tokens: 4096,
         messages: [
           { role: "user", content: prompt },
@@ -896,7 +901,8 @@ Return ONLY valid JSON, ASCII only:
         "anthropic-beta": "prompt-caching-2024-07-31",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
+        thinking: { type: "disabled" },
         max_tokens: 8192,
         system: [{ type: "text", text: "You are an expert job-fit analyst. Score each job against the candidate profile. The job descriptions are the primary source of truth for scoring — use them carefully.", cache_control: { type: "ephemeral" } }],
         messages: [{
@@ -1147,11 +1153,13 @@ Deno.serve(async (req) => {
       extractBatches.push(emailTexts.slice(i, i + EXTRACT_BATCH));
     }
 
+    const extractErrors: string[] = [];
     const extractResults = await Promise.all(
       extractBatches.map((batch, idx) => {
         console.log(`[4] Extract batch ${idx + 1}/${extractBatches.length}...`);
         return extractJobsFromEmails(batch).catch((err: any) => {
           console.error(`[4] Extract batch ${idx + 1} failed: ${err.message}. Skipping.`);
+          extractErrors.push(`batch ${idx + 1}: ${err.message}`);
           return [] as ExtractedJob[];
         });
       })
@@ -1159,7 +1167,23 @@ Deno.serve(async (req) => {
     const allExtracted: ExtractedJob[] = extractResults.flat();
     console.log(`[4] Extracted ${allExtracted.length} jobs total`);
 
+    // A batch that threw is NOT the same as a batch that found no jobs. If every
+    // batch failed, the emails were never actually read — advancing the timestamp
+    // here would discard them permanently (this silently drained months of alerts
+    // during the Claude API outage while still reporting "success, 0 jobs").
+    if (extractErrors.length === extractBatches.length && extractBatches.length > 0) {
+      throw new Error(`Job extraction failed for all ${extractBatches.length} batch(es): ${extractErrors[0]}`);
+    }
+    if (extractErrors.length > 0) {
+      await debug.warn(
+        `${extractErrors.length}/${extractBatches.length} extraction batches failed — those emails will be retried next scan`,
+        undefined,
+        { errors: extractErrors },
+      );
+    }
+
     if (allExtracted.length === 0) {
+      // Genuinely no jobs in these emails — safe to advance past them.
       await supabase.from("user_profiles").update({ last_email_scan_timestamp: maxEmailTimestampSec }).eq("id", userId);
       await supabase.from("scan_runs").insert({ user_id: userId, success: true, jobs_found: 0, jobs_added: 0 });
       return new Response(

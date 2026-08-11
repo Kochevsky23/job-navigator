@@ -119,7 +119,8 @@ You help the user with: recommending what to do next in their job search, explai
         "anthropic-beta": "prompt-caching-2024-07-31",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
+        thinking: { type: "disabled" },
         max_tokens: 1500,
         system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
         messages,

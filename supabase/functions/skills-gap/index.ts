@@ -20,7 +20,7 @@ WHAT IT DOES:
 CURRENT TECH STACK:
 - Frontend: React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, @hello-pangea/dnd (drag & drop), date-fns, Lucide icons
 - Backend: Supabase Edge Functions (Deno/TypeScript), Supabase Postgres, pg_cron
-- AI: Anthropic Claude API (claude-sonnet-4-20250514), prompt caching
+- AI: Anthropic Claude API (claude-sonnet-5), prompt caching
 - Auth: Supabase Auth + Google OAuth for Gmail
 - Email: Resend API for digest emails
 - Deployment: Supabase hosted
@@ -190,7 +190,8 @@ Deno.serve(async (req) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
+        thinking: { type: "disabled" },
         max_tokens: 2000,
         system: `You are an expert AI/developer tools researcher. You evaluate new Claude capabilities, MCP servers, and developer tools against a specific project and suggest actionable integrations. Be specific, not generic.`,
         messages: [{

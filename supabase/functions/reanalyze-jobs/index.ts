@@ -605,7 +605,8 @@ Return ONLY valid JSON. ASCII only — no Hebrew, no special quotes, no newlines
         "anthropic-beta": "prompt-caching-2024-07-31",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
+        thinking: { type: "disabled" },
         max_tokens: 8192,
         system: [{ type: "text", text: "You are an expert job-fit analyst. Score each job against the candidate profile. The job descriptions are the primary source of truth — use them to identify required skills, domain, and seniority.", cache_control: { type: "ephemeral" } }],
         messages: [{
