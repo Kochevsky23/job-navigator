@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/supabase-external';
 import { runDailyScan, runMLFeedback } from '@/lib/api';
+import { debugLog } from '@/lib/debug';
 import { useAuth } from '@/contexts/AuthContext';
 import { ScanRun } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -232,21 +233,48 @@ export default function ScanSettings() {
       );
 
       let extractedText = '';
+      let extractError = '';
+      const result = await extractResp.json().catch(() => ({}));
       if (extractResp.ok) {
-        const result = await extractResp.json();
-        extractedText = result.text || '';
+        extractedText = (result.text || '').trim();
+        if (!extractedText) extractError = 'No text could be read from the file';
+      } else {
+        extractError = result.error || `Extraction failed (${extractResp.status})`;
       }
 
-      await supabase.from('user_profiles').update({
-        cv_filename: file.name,
-        cv_text: extractedText,
-        cv_uploaded_at: new Date().toISOString(),
-        candidate_profile: null,
-      }).eq('id', user.id);
+      if (extractedText) {
+        // Clearing candidate_profile forces it to be regenerated from the new CV
+        // on the next scan — only correct when we actually have new CV text.
+        await supabase.from('user_profiles').update({
+          cv_filename: file.name,
+          cv_text: extractedText,
+          cv_uploaded_at: new Date().toISOString(),
+          candidate_profile: null,
+        }).eq('id', user.id);
 
-      setCvFilename(file.name);
-      setCvText(extractedText);
-      toast.success('CV uploaded and extracted!');
+        setCvFilename(file.name);
+        setCvText(extractedText);
+        toast.success('CV uploaded and extracted!');
+      } else {
+        // The file is stored, but never overwrite good CV text with nothing:
+        // cv_text drives all scoring and CV generation, and wiping it silently
+        // breaks both. Leave cv_text and candidate_profile untouched.
+        await supabase.from('user_profiles').update({
+          cv_filename: file.name,
+          cv_uploaded_at: new Date().toISOString(),
+        }).eq('id', user.id);
+
+        setCvFilename(file.name);
+        await debugLog({
+          severity: 'error',
+          module: 'edge_function',
+          message: `CV text extraction failed: ${extractError}`,
+          fileName: 'src/pages/ScanSettings.tsx',
+          functionName: 'handleCvUpload',
+          rawDetails: { filename: file.name, status: extractResp.status },
+        });
+        toast.error(`CV file saved, but the text could not be read (${extractError}). Your previous CV text is unchanged — paste the new text below and hit Save Profile.`);
+      }
     } catch (e: any) {
       toast.error(e.message || 'Upload failed');
     } finally {

@@ -51,42 +51,52 @@ Deno.serve(async (req) => {
           .trim();
       }
     } else if (name.endsWith(".pdf")) {
-      // For PDF, try basic text extraction
-      // Read the raw bytes and look for text streams
+      // Claude reads the PDF directly. The previous implementation regex-scanned
+      // raw bytes for uncompressed BT/ET text operators, which finds nothing in
+      // any PDF whose content streams are FlateDecode-compressed (i.e. almost
+      // all of them — Word, Google Docs, Canva) and cannot handle non-Latin
+      // scripts at all.
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
-      const raw = new TextDecoder("latin1").decode(bytes);
-      
-      // Extract text between BT and ET markers (PDF text objects)
-      const textBlocks: string[] = [];
-      const btEtRegex = /BT\s([\s\S]*?)ET/g;
-      let match;
-      while ((match = btEtRegex.exec(raw)) !== null) {
-        const block = match[1];
-        // Extract text from Tj and TJ operators
-        const tjRegex = /\(([^)]*)\)\s*Tj/g;
-        let tjMatch;
-        while ((tjMatch = tjRegex.exec(block)) !== null) {
-          textBlocks.push(tjMatch[1]);
-        }
-        // TJ array
-        const tjArrayRegex = /\[([^\]]*)\]\s*TJ/g;
-        let arrMatch;
-        while ((arrMatch = tjArrayRegex.exec(block)) !== null) {
-          const inner = arrMatch[1];
-          const strRegex = /\(([^)]*)\)/g;
-          let strMatch;
-          while ((strMatch = strRegex.exec(inner)) !== null) {
-            textBlocks.push(strMatch[1]);
-          }
-        }
+      let binary = "";
+      const CHUNK = 0x8000; // chunk the conversion — spreading a multi-MB array blows the call stack
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
       }
-      text = textBlocks.join(" ").replace(/\\n/g, "\n").replace(/\s+/g, " ").trim();
-      
-      // If basic extraction got very little text, note it
-      if (text.length < 50) {
-        text = "[PDF text extraction returned limited results. The CV file has been stored. You can update your CV text from settings.]";
+      const base64 = btoa(binary);
+
+      const claudeResp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": Deno.env.get("CLAUDE_API_KEY")!,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-opus-5",
+          max_tokens: 16000,
+          messages: [{
+            role: "user",
+            content: [
+              {
+                type: "document",
+                source: { type: "base64", media_type: "application/pdf", data: base64 },
+              },
+              {
+                type: "text",
+                text: "Transcribe this CV to plain text, preserving the reading order, section headings, job titles, dates, and bullet points. Keep the original language — do not translate. Output only the transcription, with no preamble or commentary.",
+              },
+            ],
+          }],
+        }),
+      });
+
+      const claudeData = await claudeResp.json();
+      if (!claudeResp.ok) {
+        throw new Error(claudeData?.error?.message || `PDF extraction failed (${claudeResp.status})`);
       }
+      text = claudeData.content?.[0]?.text?.trim() || "";
+      if (!text) throw new Error("PDF extraction returned no text");
     } else {
       // Try plain text
       text = await file.text();
