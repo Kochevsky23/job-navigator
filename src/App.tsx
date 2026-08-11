@@ -17,6 +17,8 @@ import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 import DebugDashboard from "./pages/DebugDashboard";
 import SecurityReview from "./pages/SecurityReview";
+import AiAssistant from "./pages/AiAssistant";
+import Admin from "./pages/Admin";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +57,14 @@ const App = () => (
               <Route
                 path="/security"
                 element={<ProtectedRoute><><Navbar /><SecurityReview /></></ProtectedRoute>}
+              />
+              <Route
+                path="/assistant"
+                element={<ProtectedRoute><><Navbar /><AiAssistant /></></ProtectedRoute>}
+              />
+              <Route
+                path="/admin"
+                element={<ProtectedRoute><><Navbar /><Admin /></></ProtectedRoute>}
               />
               <Route path="*" element={<NotFound />} />
             </Routes>

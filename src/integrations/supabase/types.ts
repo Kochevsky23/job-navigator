@@ -14,75 +14,209 @@ export type Database = {
   }
   public: {
     Tables: {
-      jobs: {
+      chat_messages: {
         Row: {
-          alert_date: string | null
-          applied_at: string | null
-          company: string
-          company_domain: string | null
+          content: string
           created_at: string
-          deadline: string | null
-          description: string | null
-          exp_required: string | null
-          fingerprint: string | null
           id: string
-          job_link: string | null
-          linkedin_id: string | null
-          location: string | null
-          notes: string | null
-          priority: string
-          reason: string | null
+          job_id: string | null
           role: string
-          score: number
-          status: string
-          tailored_cv: string | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          role: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      debug_logs: {
+        Row: {
+          created_at: string
+          debug_id: string
+          file_name: string | null
+          function_name: string | null
+          id: string
+          message: string
+          module: string
+          raw_details: Json | null
+          severity: string
+          stack_trace: string | null
+          suggested_fix: string | null
           user_id: string | null
         }
         Insert: {
-          alert_date?: string | null
-          applied_at?: string | null
-          company?: string
-          company_domain?: string | null
           created_at?: string
-          deadline?: string | null
-          description?: string | null
-          exp_required?: string | null
-          fingerprint?: string | null
+          debug_id: string
+          file_name?: string | null
+          function_name?: string | null
           id?: string
-          job_link?: string | null
-          linkedin_id?: string | null
-          location?: string | null
-          notes?: string | null
-          priority?: string
-          reason?: string | null
-          role?: string
-          score?: number
-          status?: string
-          tailored_cv?: string | null
+          message: string
+          module: string
+          raw_details?: Json | null
+          severity: string
+          stack_trace?: string | null
+          suggested_fix?: string | null
           user_id?: string | null
         }
         Update: {
+          created_at?: string
+          debug_id?: string
+          file_name?: string | null
+          function_name?: string | null
+          id?: string
+          message?: string
+          module?: string
+          raw_details?: Json | null
+          severity?: string
+          stack_trace?: string | null
+          suggested_fix?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      jobs: {
+        Row: {
+          ai_risk: string | null
+          alert_date: string | null
+          applied_at: string | null
+          company: string | null
+          company_domain: string | null
+          company_research: string | null
+          contacts: Json | null
+          cover_letter: string | null
+          created_at: string | null
+          description: string | null
+          exp_required: string | null
+          feedback: string | null
+          feedback_reason: string | null
+          fingerprint: string | null
+          hiring_probability: number | null
+          id: string
+          interview_prep: string | null
+          job_link: string | null
+          linkedin_id: string | null
+          location: string | null
+          next_action: string | null
+          next_action_due_at: string | null
+          priority: string | null
+          reason: string | null
+          role: string | null
+          score: number | null
+          status: string | null
+          tailored_cv: string | null
+          tailored_cv_filename: string | null
+          tailored_cv_url: string | null
+          user_id: string | null
+          user_score: number | null
+        }
+        Insert: {
+          ai_risk?: string | null
           alert_date?: string | null
           applied_at?: string | null
-          company?: string
+          company?: string | null
           company_domain?: string | null
-          created_at?: string
-          deadline?: string | null
+          company_research?: string | null
+          contacts?: Json | null
+          cover_letter?: string | null
+          created_at?: string | null
           description?: string | null
           exp_required?: string | null
+          feedback?: string | null
+          feedback_reason?: string | null
           fingerprint?: string | null
+          hiring_probability?: number | null
           id?: string
+          interview_prep?: string | null
           job_link?: string | null
           linkedin_id?: string | null
           location?: string | null
-          notes?: string | null
-          priority?: string
+          next_action?: string | null
+          next_action_due_at?: string | null
+          priority?: string | null
           reason?: string | null
-          role?: string
-          score?: number
-          status?: string
+          role?: string | null
+          score?: number | null
+          status?: string | null
           tailored_cv?: string | null
+          tailored_cv_filename?: string | null
+          tailored_cv_url?: string | null
           user_id?: string | null
+          user_score?: number | null
+        }
+        Update: {
+          ai_risk?: string | null
+          alert_date?: string | null
+          applied_at?: string | null
+          company?: string | null
+          company_domain?: string | null
+          company_research?: string | null
+          contacts?: Json | null
+          cover_letter?: string | null
+          created_at?: string | null
+          description?: string | null
+          exp_required?: string | null
+          feedback?: string | null
+          feedback_reason?: string | null
+          fingerprint?: string | null
+          hiring_probability?: number | null
+          id?: string
+          interview_prep?: string | null
+          job_link?: string | null
+          linkedin_id?: string | null
+          location?: string | null
+          next_action?: string | null
+          next_action_due_at?: string | null
+          priority?: string | null
+          reason?: string | null
+          role?: string | null
+          score?: number | null
+          status?: string | null
+          tailored_cv?: string | null
+          tailored_cv_filename?: string | null
+          tailored_cv_url?: string | null
+          user_id?: string | null
+          user_score?: number | null
+        }
+        Relationships: []
+      }
+      rate_limits: {
+        Row: {
+          called_at: string
+          function_name: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          called_at?: string
+          function_name: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          called_at?: string
+          function_name?: string
+          id?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -90,29 +224,109 @@ export type Database = {
         Row: {
           error_text: string | null
           id: string
-          jobs_added: number
-          jobs_found: number
-          started_at: string
-          success: boolean
+          jobs_added: number | null
+          jobs_found: number | null
+          started_at: string | null
+          success: boolean | null
           user_id: string | null
         }
         Insert: {
           error_text?: string | null
           id?: string
-          jobs_added?: number
-          jobs_found?: number
-          started_at?: string
-          success?: boolean
+          jobs_added?: number | null
+          jobs_found?: number | null
+          started_at?: string | null
+          success?: boolean | null
           user_id?: string | null
         }
         Update: {
           error_text?: string | null
           id?: string
-          jobs_added?: number
-          jobs_found?: number
-          started_at?: string
-          success?: boolean
+          jobs_added?: number | null
+          jobs_found?: number | null
+          started_at?: string | null
+          success?: boolean | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      scoring_metrics: {
+        Row: {
+          accuracy: number | null
+          false_negatives: number | null
+          false_positives: number | null
+          id: string
+          precision_score: number | null
+          recall_score: number | null
+          recorded_at: string | null
+          total_feedback: number | null
+          true_negatives: number | null
+          true_positives: number | null
+          user_id: string | null
+        }
+        Insert: {
+          accuracy?: number | null
+          false_negatives?: number | null
+          false_positives?: number | null
+          id?: string
+          precision_score?: number | null
+          recall_score?: number | null
+          recorded_at?: string | null
+          total_feedback?: number | null
+          true_negatives?: number | null
+          true_positives?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          accuracy?: number | null
+          false_negatives?: number | null
+          false_positives?: number | null
+          id?: string
+          precision_score?: number | null
+          recall_score?: number | null
+          recorded_at?: string | null
+          total_feedback?: number | null
+          true_negatives?: number | null
+          true_positives?: number | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scoring_metrics_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_reviews: {
+        Row: {
+          created_at: string
+          findings: Json
+          id: string
+          source: string
+          status: string
+          summary: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          findings: Json
+          id?: string
+          source?: string
+          status?: string
+          summary: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          findings?: Json
+          id?: string
+          source?: string
+          status?: string
+          summary?: Json
+          user_id?: string
         }
         Relationships: []
       }
@@ -127,7 +341,19 @@ export type Database = {
           cv_uploaded_at: string | null
           email: string | null
           full_name: string | null
+          google_refresh_token: string | null
+          home_city: string | null
           id: string
+          is_admin: boolean
+          last_email_scan_timestamp: number | null
+          last_status_changes: Json | null
+          last_status_sync_timestamp: number | null
+          linkedin_url: string | null
+          pending_status_changes: Json | null
+          scheduled_scan_enabled: boolean | null
+          scheduled_scan_hour: number | null
+          scoring_feedback: Json | null
+          vault_token_id: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -139,7 +365,19 @@ export type Database = {
           cv_uploaded_at?: string | null
           email?: string | null
           full_name?: string | null
+          google_refresh_token?: string | null
+          home_city?: string | null
           id: string
+          is_admin?: boolean
+          last_email_scan_timestamp?: number | null
+          last_status_changes?: Json | null
+          last_status_sync_timestamp?: number | null
+          linkedin_url?: string | null
+          pending_status_changes?: Json | null
+          scheduled_scan_enabled?: boolean | null
+          scheduled_scan_hour?: number | null
+          scoring_feedback?: Json | null
+          vault_token_id?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -151,7 +389,19 @@ export type Database = {
           cv_uploaded_at?: string | null
           email?: string | null
           full_name?: string | null
+          google_refresh_token?: string | null
+          home_city?: string | null
           id?: string
+          is_admin?: boolean
+          last_email_scan_timestamp?: number | null
+          last_status_changes?: Json | null
+          last_status_sync_timestamp?: number | null
+          linkedin_url?: string | null
+          pending_status_changes?: Json | null
+          scheduled_scan_enabled?: boolean | null
+          scheduled_scan_hour?: number | null
+          scoring_feedback?: Json | null
+          vault_token_id?: string | null
         }
         Relationships: []
       }
@@ -160,7 +410,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      delete_vault_secret: { Args: { secret_id: string }; Returns: undefined }
+      get_decrypted_secret: { Args: { secret_id: string }; Returns: string }
+      upsert_vault_secret: {
+        Args: { p_name?: string; p_secret: string; p_secret_id: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

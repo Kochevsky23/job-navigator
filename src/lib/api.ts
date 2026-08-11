@@ -79,6 +79,20 @@ export async function generateCompanyResearch(jobId: string): Promise<{ success:
   return data;
 }
 
+export async function chatWithAgent(message: string, jobId?: string): Promise<{ reply: string }> {
+  const { data, error } = await supabase.functions.invoke('chat-agent', { body: { message, jobId } });
+  if (error) {
+    let msg = error.message || 'Chat failed';
+    try {
+      const body = await (error as any).context?.json?.();
+      if (body?.error) msg = body.error;
+    } catch {}
+    await debugLog({ severity: 'error', module: 'edge_function', message: `chat-agent failed: ${msg}`, error, functionName: 'chatWithAgent', fileName: 'src/lib/api.ts', rawDetails: { jobId } });
+    throw new Error(msg);
+  }
+  return data;
+}
+
 export async function runMLFeedback(): Promise<{
   success: boolean;
   metrics?: { precision: number | null; recall: number | null; f1: number | null; accuracy: number | null; TP: number; FP: number; TN: number; FN: number };

@@ -1,8 +1,9 @@
 import { Job } from '@/types/database';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, FileText, Loader2, Download, CheckCircle2, Send, StickyNote, Save, BookOpen, Building2, Sparkles, ChevronDown, ChevronUp, RefreshCw, Clock, AlertCircle } from 'lucide-react';
+import { ExternalLink, FileText, Loader2, Download, CheckCircle2, Send, StickyNote, Save, BookOpen, Building2, Sparkles, ChevronDown, ChevronUp, RefreshCw, Clock, AlertCircle, MessageCircle } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { generateCV, generateCoverLetter, generateInterviewPrep, generateCompanyResearch } from '@/lib/api';
 import { db } from '@/lib/supabase-external';
 import { toast } from 'sonner';
@@ -130,6 +131,7 @@ function CollapsibleSection({
 }
 
 export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) {
+  const navigate = useNavigate();
   const [generating, setGenerating] = useState(false);
   const [generatingCoverLetter, setGeneratingCoverLetter] = useState(false);
   const [generatingInterviewPrep, setGeneratingInterviewPrep] = useState(false);
@@ -422,9 +424,17 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
           {/* AI Tools */}
           {job.priority !== 'REJECTED' && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <span className="text-sm font-semibold">AI Tools</span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-semibold">AI Tools</span>
+                </div>
+                <button
+                  onClick={() => navigate(`/assistant?jobId=${job.id}`)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-primary hover:bg-primary/10 px-2.5 py-1.5 rounded-lg transition-colors"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> Ask AI about this job
+                </button>
               </div>
 
               {/* Tailored CV */}
@@ -465,6 +475,26 @@ export default function JobDetailPanel({ job, open, onClose, onUpdate }: Props) 
                 hasContent={!!displayJob.cover_letter}
                 onGenerate={handleGenerateCoverLetter}
                 accentColor="accent"
+                extraActions={
+                  <button
+                    onClick={() => {
+                      const w = window.open('', '_blank');
+                      if (!w) return;
+                      const escaped = displayJob.cover_letter!
+                        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                      w.document.write(
+                        `<html><head><title>Cover Letter — ${job.company}</title>` +
+                        `<style>body{font-family:Georgia,serif;max-width:700px;margin:48px auto;padding:0 24px;` +
+                        `line-height:1.7;white-space:pre-wrap;color:#111}</style></head>` +
+                        `<body>${escaped}<script>window.onload=function(){window.print();}<\/script></body></html>`
+                      );
+                      w.document.close();
+                    }}
+                    className="flex items-center gap-1 text-xs text-primary hover:bg-primary/10 px-2 py-1 rounded-lg transition-colors"
+                  >
+                    <Download className="h-3.5 w-3.5" /> PDF
+                  </button>
+                }
               />
 
               <CollapsibleSection

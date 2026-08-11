@@ -32,15 +32,17 @@ Deno.serve(async (req) => {
     serviceRoleKey
   );
 
-  // mode: "scan" = find new jobs only (morning)
-  //        "scan_and_status" = find new jobs + age + detect status changes (evening)
-  // Auto-detected from UTC hour when not passed explicitly (19:00 UTC = evening run).
+  // mode: "scan"           = find new jobs only (morning)
+  //       "scan_and_status" = find new jobs + age + detect status changes (evening)
+  //       "status_only"     = skip job discovery, just age + detect status changes (4-hourly)
+  // Auto-detected from UTC hour when not passed explicitly (16:00 UTC = evening run).
   const body = await req.json().catch(() => ({}));
   const utcHour = new Date().getUTCHours();
   const autoMode: "scan" | "scan_and_status" = utcHour >= 16 ? "scan_and_status" : "scan";
-  const mode: "scan" | "scan_and_status" =
+  const mode: "scan" | "scan_and_status" | "status_only" =
     body.mode === "scan_and_status" ? "scan_and_status" :
     body.mode === "scan" ? "scan" :
+    body.mode === "status_only" ? "status_only" :
     autoMode;
 
   // Get all users with Gmail connected (vault_token_id is source of truth)
@@ -64,24 +66,26 @@ Deno.serve(async (req) => {
   const scanTask = (async () => {
     for (const profile of profiles) {
       try {
-        // ── Both modes: find and score new jobs (Claude) ──────────────────────
-        const { data: authUser } = await supabase.auth.admin.getUserById(profile.id);
-        const userEmail = authUser?.user?.email;
+        // ── scan / scan_and_status only: find and score new jobs (Claude) ───────
+        if (mode !== "status_only") {
+          const { data: authUser } = await supabase.auth.admin.getUserById(profile.id);
+          const userEmail = authUser?.user?.email;
 
-        const scanResp = await fetch(`${supabaseUrl}/functions/v1/daily-scan`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceRoleKey}` },
-          body: JSON.stringify({ userId: profile.id, userEmail }),
-        });
-        const scanResult = await scanResp.json().catch(() => ({}));
-        if (scanResp.ok) {
-          console.log(`User ${profile.id}: found=${scanResult.jobs_found}, added=${scanResult.jobs_added}`);
-        } else {
-          console.error(`User ${profile.id} scan failed:`, scanResult.error);
+          const scanResp = await fetch(`${supabaseUrl}/functions/v1/daily-scan`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceRoleKey}` },
+            body: JSON.stringify({ userId: profile.id, userEmail }),
+          });
+          const scanResult = await scanResp.json().catch(() => ({}));
+          if (scanResp.ok) {
+            console.log(`User ${profile.id}: found=${scanResult.jobs_found}, added=${scanResult.jobs_added}`);
+          } else {
+            console.error(`User ${profile.id} scan failed:`, scanResult.error);
+          }
         }
 
-        // ── Morning only (mode !== scan_and_status): age jobs + sync statuses ───
-        if (mode !== "scan_and_status") {
+        // ── scan_and_status (evening) + status_only (4-hourly): age jobs + sync statuses ───
+        if (mode === "scan_and_status" || mode === "status_only") {
           const sevenDaysAgo    = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000).toISOString();
           const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
 

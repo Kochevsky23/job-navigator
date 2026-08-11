@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut, Menu, X, User, Sun, Moon, Bug, Shield } from 'lucide-react';
+import { Compass, LayoutDashboard, Table2, KanbanSquare, Settings, LogOut, Menu, X, User, Sun, Moon, Bug, Shield, Sparkles, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
@@ -7,10 +7,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 
-const links = [
+const baseLinks = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/jobs', label: 'Jobs', icon: Table2 },
   { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
+  { to: '/assistant', label: 'AI Assistant', icon: Sparkles },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/debug', label: 'Debug', icon: Bug },
   { to: '/security', label: 'Security', icon: Shield },
@@ -25,10 +26,11 @@ export default function Navbar() {
   const [initials, setInitials] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (user) {
-      supabase.from('user_profiles').select('avatar_url, full_name, email').eq('id', user.id).single()
+      supabase.from('user_profiles').select('avatar_url, full_name, email, is_admin').eq('id', user.id).single()
         .then(({ data }) => {
           if (data) {
             setAvatarUrl((data as any).avatar_url || '');
@@ -36,10 +38,15 @@ export default function Navbar() {
             setFullName(name);
             setEmail((data as any).email || user.email || '');
             setInitials(name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase());
+            setIsAdmin(!!(data as any).is_admin);
           }
         });
     }
   }, [user]);
+
+  const links = isAdmin
+    ? [...baseLinks, { to: '/admin', label: 'Admin', icon: ShieldCheck }]
+    : baseLinks;
 
   const handleLogout = async () => {
     await signOut();
