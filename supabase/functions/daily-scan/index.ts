@@ -1298,11 +1298,12 @@ Deno.serve(async (req) => {
   } catch (error: any) {
     console.error("Scan error:", error);
     const debugId = await debug.critical(`Scan failed: ${error.message || "Unknown error"}`, error, { jobsFound, jobsAdded });
-    // Advance timestamp even on failure so next scan doesn't reprocess the same emails
-    if (typeof maxEmailTimestampSec !== "undefined" && maxEmailTimestampSec > 0) {
-      await supabase.from("user_profiles").update({ last_email_scan_timestamp: maxEmailTimestampSec }).eq("id", userId);
-      console.log(`[catch] Advanced timestamp to ${maxEmailTimestampSec} despite error`);
-    }
+    // Do NOT advance last_email_scan_timestamp here. Advancing on failure silently
+    // discards every email in the failed batch — a transient outage (expired Gmail
+    // token, Claude API error, timeout) then burns through the whole backlog at
+    // 20 emails per run, twice a day, with no way to recover them. Leaving the
+    // timestamp put means the next successful scan retries the same emails.
+    // Duplicate protection is already handled by fingerprint dedup on upsert.
     await supabase.from("scan_runs").insert({
       user_id: userId,
       success: false,
