@@ -173,46 +173,51 @@ export default function Dashboard() {
     }
   };
 
-  const highPriority = jobs.filter(j => j.priority === 'HIGH').length;
-  const cvsGenerated = jobs.filter(j => j.tailored_cv).length;
-  const appliedCount = jobs.filter(j => j.status === 'Applied' || j.status === 'Interviewing' || j.status === 'Offer').length;
+  // Only currently-relevant jobs count toward dashboard stats — excludes
+  // stale/dead listings (Archive), employer rejections (Rejected), and
+  // no-response applications (Ghosted).
+  const activeJobs = jobs.filter(j => !['Archive', 'Rejected', 'Ghosted'].includes(j.status));
+
+  const highPriority = activeJobs.filter(j => j.priority === 'HIGH').length;
+  const cvsGenerated = activeJobs.filter(j => j.tailored_cv).length;
+  const appliedCount = activeJobs.filter(j => j.status === 'Applied' || j.status === 'Interviewing' || j.status === 'Offer').length;
   const lastScan = scans[0];
 
-  const topJobs = [...jobs]
-    .sort((a, b) => b.score - a.score)
+  const topJobs = [...activeJobs]
     .filter(j => j.priority !== 'REJECTED')
+    .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
   const scoreDistribution = Array.from({ length: 11 }, (_, i) => ({
     score: i.toString(),
-    count: jobs.filter(j => j.score === i).length,
+    count: activeJobs.filter(j => j.score === i).length,
     fill: SCORE_COLORS[i],
   })).filter(d => d.count > 0);
 
   const priorityBreakdown = ['HIGH', 'MEDIUM', 'LOW', 'REJECTED']
-    .map(p => ({ name: p, value: jobs.filter(j => j.priority === p).length, color: PRIORITY_COLORS[p] }))
+    .map(p => ({ name: p, value: activeJobs.filter(j => j.priority === p).length, color: PRIORITY_COLORS[p] }))
     .filter(d => d.value > 0);
 
   const totalPriority = priorityBreakdown.reduce((s, p) => s + p.value, 0);
 
   // Application pipeline
   const pipeline = [
-    { label: 'New', count: jobs.filter(j => j.status === 'New').length, color: 'hsl(214 100% 65%)' },
-    { label: 'Applied', count: jobs.filter(j => j.status === 'Applied').length, color: 'hsl(38 92% 50%)' },
-    { label: 'Interviewing', count: jobs.filter(j => j.status === 'Interviewing').length, color: 'hsl(155 100% 49%)' },
-    { label: 'Offer', count: jobs.filter(j => j.status === 'Offer').length, color: 'hsl(155 100% 70%)' },
+    { label: 'New', count: activeJobs.filter(j => j.status === 'New').length, color: 'hsl(214 100% 65%)' },
+    { label: 'Applied', count: activeJobs.filter(j => j.status === 'Applied').length, color: 'hsl(38 92% 50%)' },
+    { label: 'Interviewing', count: activeJobs.filter(j => j.status === 'Interviewing').length, color: 'hsl(155 100% 49%)' },
+    { label: 'Offer', count: activeJobs.filter(j => j.status === 'Offer').length, color: 'hsl(155 100% 70%)' },
   ];
   const maxPipelineCount = Math.max(...pipeline.map(s => s.count), 1);
 
   // Health signals
   const now = new Date();
-  const ghostRisk = jobs.filter(j => j.status === 'Applied' && j.applied_at && (now.getTime() - new Date(j.applied_at).getTime()) > 14 * 86400000).length;
-  const overdueActions = jobs.filter(j => j.next_action && j.next_action_due_at && new Date(j.next_action_due_at) < now).length;
-  const activeProcess = jobs.filter(j => j.status === 'Assessment' || j.status === 'Interviewing').length;
-  const offerPending = jobs.filter(j => j.status === 'Offer').length;
+  const ghostRisk = activeJobs.filter(j => j.status === 'Applied' && j.applied_at && (now.getTime() - new Date(j.applied_at).getTime()) > 14 * 86400000).length;
+  const overdueActions = activeJobs.filter(j => j.next_action && j.next_action_due_at && new Date(j.next_action_due_at) < now).length;
+  const activeProcess = activeJobs.filter(j => j.status === 'Assessment' || j.status === 'Interviewing').length;
+  const offerPending = activeJobs.filter(j => j.status === 'Offer').length;
 
   // ML metrics
-  const rated = jobs.filter(j => j.user_score !== null && j.user_score !== undefined);
+  const rated = activeJobs.filter(j => j.user_score !== null && j.user_score !== undefined);
   const hasMetrics = rated.length >= 3;
   let precision: number | null = null, recall: number | null = null, accuracy: number | null = null;
   let TP = 0, FP = 0, FN = 0, TN = 0;
@@ -235,7 +240,7 @@ export default function Dashboard() {
   }
 
   const stats = [
-    { label: 'Total Jobs', value: jobs.length, icon: Briefcase, iconBg: 'bg-primary/10', iconColor: 'text-primary', accent: 'hsl(155 100% 49%)' },
+    { label: 'Total Jobs', value: activeJobs.length, icon: Briefcase, iconBg: 'bg-primary/10', iconColor: 'text-primary', accent: 'hsl(155 100% 49%)' },
     { label: 'High Priority', value: highPriority, icon: AlertTriangle, iconBg: 'bg-[hsl(var(--priority-high)/0.12)]', iconColor: 'text-[hsl(var(--priority-high))]', accent: 'hsl(155 100% 49%)' },
     { label: 'Applied', value: appliedCount, icon: Send, iconBg: 'bg-accent/10', iconColor: 'text-accent', accent: 'hsl(214 100% 65%)' },
     { label: 'CVs Generated', value: cvsGenerated, icon: FileText, iconBg: 'bg-primary/10', iconColor: 'text-primary', accent: 'hsl(155 100% 49%)' },
@@ -426,7 +431,7 @@ export default function Dashboard() {
       )}
 
       {/* Analytics */}
-      {jobs.length > 0 && (
+      {activeJobs.length > 0 && (
         <div className="animate-fade-up space-y-4" style={{ animationDelay: '450ms' }}>
           <h2 className="text-base font-display font-semibold text-muted-foreground uppercase tracking-wider text-xs flex items-center gap-2">
             <BarChart3 className="h-3.5 w-3.5" />
