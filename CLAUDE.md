@@ -40,6 +40,19 @@ When user says "Session Started":
 
 ---
 
+## Commit Every Change (ALWAYS ACTIVE)
+
+**Every code change — no exceptions — must be committed AND pushed to GitHub in the same step.**
+
+Rules:
+- After ANY file edit (frontend, edge function, config, docs): `git add <files> && git commit && git push origin main`
+- Never leave a session with uncommitted changes
+- Never tell the user "done" before the push command succeeds
+- Commit message must describe what changed and why (not just "update")
+- Group related changes into one commit — do not commit one file at a time unless they are truly independent
+
+---
+
 ## Critical Working Rules
 
 ### Frontend / src changes (React, TypeScript, CSS)
