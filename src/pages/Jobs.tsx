@@ -17,6 +17,10 @@ const priorityClass: Record<string, string> = {
   REJECTED: 'bg-priority-rejected priority-rejected border',
 };
 
+// Terminal statuses: the search is over for these jobs, so they're excluded
+// from the default "All Statuses" view and reachable by selecting them.
+const INACTIVE_STATUSES = ['Archive', 'Rejected', 'Ghosted'];
+
 function ScorePill({ score }: { score: number }) {
   const cls = score >= 8 ? 'score-pill-high' : score >= 6 ? 'score-pill-medium' : 'score-pill-low';
   return (
@@ -45,10 +49,11 @@ export default function Jobs() {
   const filtered = useMemo(() => {
     return jobs.filter(j => {
       if (priorityFilter !== 'ALL' && j.priority !== priorityFilter) return false;
-      // Hide Archive unless explicitly selected
-      if (statusFilter === 'Archive') { if (j.status !== 'Archive') return false; }
-      else if (statusFilter !== 'ALL') { if (j.status !== statusFilter) return false; }
-      else { if (j.status === 'Archive') return false; }
+      // "All Statuses" means all *active* jobs — terminal statuses are still
+      // reachable by selecting them explicitly. Same active/inactive split the
+      // Dashboard uses, so the two pages agree on what counts as current.
+      if (statusFilter !== 'ALL') { if (j.status !== statusFilter) return false; }
+      else if (INACTIVE_STATUSES.includes(j.status)) return false;
       if (j.score < minScore) return false;
       return true;
     });
@@ -112,13 +117,15 @@ export default function Jobs() {
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ALL">All Statuses</SelectItem>
+            <SelectItem value="ALL">All Active</SelectItem>
             <SelectItem value="New">New</SelectItem>
             <SelectItem value="Old">Old</SelectItem>
             <SelectItem value="Applied">Applied</SelectItem>
+            <SelectItem value="Assessment">Assessment</SelectItem>
             <SelectItem value="Interviewing">Interviewing</SelectItem>
             <SelectItem value="Offer">Offer</SelectItem>
             <SelectItem value="Rejected">Rejected</SelectItem>
+            <SelectItem value="Ghosted">Ghosted</SelectItem>
             <SelectItem value="Archive">Archive</SelectItem>
           </SelectContent>
         </Select>
