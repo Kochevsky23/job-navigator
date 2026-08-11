@@ -1154,12 +1154,14 @@ Deno.serve(async (req) => {
     }
 
     const extractErrors: string[] = [];
+    const batchFailed: boolean[] = new Array(extractBatches.length).fill(false);
     const extractResults = await Promise.all(
       extractBatches.map((batch, idx) => {
         console.log(`[4] Extract batch ${idx + 1}/${extractBatches.length}...`);
         return extractJobsFromEmails(batch).catch((err: any) => {
           console.error(`[4] Extract batch ${idx + 1} failed: ${err.message}. Skipping.`);
           extractErrors.push(`batch ${idx + 1}: ${err.message}`);
+          batchFailed[idx] = true;
           return [] as ExtractedJob[];
         });
       })
@@ -1183,7 +1185,16 @@ Deno.serve(async (req) => {
     }
 
     if (allExtracted.length === 0) {
-      // Genuinely no jobs in these emails — safe to advance past them.
+      // Genuinely no jobs in these emails — safe to advance past them, but only
+      // past the leading batches that actually succeeded; a failed batch's emails
+      // were never read and must be retried.
+      let okEmails = 0;
+      for (let idx = 0; idx < extractBatches.length && !batchFailed[idx]; idx++) {
+        okEmails += extractBatches[idx].length;
+      }
+      maxEmailTimestampSec = okEmails > 0
+        ? Math.floor(emailsToProcess[okEmails - 1].internalDate / 1000)
+        : storedTimestamp;
       await supabase.from("user_profiles").update({ last_email_scan_timestamp: maxEmailTimestampSec }).eq("id", userId);
       await supabase.from("scan_runs").insert({ user_id: userId, success: true, jobs_found: 0, jobs_added: 0 });
       return new Response(
@@ -1192,14 +1203,37 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Cap jobs to score: each scoring batch takes ~45s, and we have ~95s left after extraction.
-    // That allows exactly 2 batches (20 jobs). Cap here before fetching descriptions too.
+    // Scoring is capped by the 150s function limit, so a run can't always finish
+    // every job it extracted. Previously the overflow was sliced off and thrown
+    // away while the timestamp still advanced past all the emails — those jobs
+    // were unrecoverable. Now the timestamp only moves past emails whose jobs
+    // were fully scored, so the remainder is picked up by the next run.
+    //
+    // Each extraction batch maps to a known slice of emails, which gives exact
+    // attribution. Consume batches in order and stop at the first one that either
+    // failed (its emails were never read) or would exceed the scoring cap.
     const MAX_JOBS_TO_SCORE = 10; // 2 scoring batches × ~50s each hits the 150s timeout; 1 batch keeps us at ~90s
-    const jobsToProcess = allExtracted.length > MAX_JOBS_TO_SCORE
-      ? allExtracted.slice(0, MAX_JOBS_TO_SCORE)
-      : allExtracted;
-    if (allExtracted.length > MAX_JOBS_TO_SCORE) {
-      console.log(`[4] Capping to ${MAX_JOBS_TO_SCORE} jobs for scoring (extracted ${allExtracted.length})`);
+    const jobsToProcess: ExtractedJob[] = [];
+    let emailsConsumed = 0;
+    for (let idx = 0; idx < extractBatches.length; idx++) {
+      if (batchFailed[idx]) break;
+      const batchJobs = extractResults[idx];
+      // Always take the first batch even if it alone overflows: refusing to
+      // advance at all would re-extract the same emails forever.
+      if (idx > 0 && jobsToProcess.length + batchJobs.length > MAX_JOBS_TO_SCORE) break;
+      jobsToProcess.push(...batchJobs.slice(0, Math.max(0, MAX_JOBS_TO_SCORE - jobsToProcess.length)));
+      emailsConsumed += extractBatches[idx].length;
+      if (jobsToProcess.length >= MAX_JOBS_TO_SCORE) break;
+    }
+
+    // Only advance past emails we actually finished with.
+    maxEmailTimestampSec = emailsConsumed > 0
+      ? Math.floor(emailsToProcess[emailsConsumed - 1].internalDate / 1000)
+      : storedTimestamp;
+
+    const jobsDeferred = allExtracted.length - jobsToProcess.length;
+    if (jobsDeferred > 0) {
+      console.log(`[4] Scoring ${jobsToProcess.length} of ${allExtracted.length} extracted jobs; ${jobsDeferred} deferred to the next run (consumed ${emailsConsumed}/${emailsToProcess.length} emails)`);
     }
 
     // Stage 2: Fetch job descriptions (10 concurrent)
@@ -1316,7 +1350,7 @@ Deno.serve(async (req) => {
 
     console.log(`Scan complete: found=${jobsFound}, added=${jobsAdded}`);
     return new Response(
-      JSON.stringify({ jobs_found: jobsFound, jobs_added: jobsAdded, jobs_skipped_duplicate: jobsFound - jobsAdded, description_sources: { linkedin: linkedinCount, careers_page: careersCount, email_context: emailCtxCount } }),
+      JSON.stringify({ jobs_found: jobsFound, jobs_added: jobsAdded, jobs_skipped_duplicate: jobsFound - jobsAdded, jobs_extracted: allExtracted.length, jobs_deferred: jobsDeferred, description_sources: { linkedin: linkedinCount, careers_page: careersCount, email_context: emailCtxCount } }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {

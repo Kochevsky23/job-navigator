@@ -62,9 +62,11 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 
-  // Build tasks — run in background so we can respond immediately
-  const scanTask = (async () => {
-    for (const profile of profiles) {
+  // One user's full pass. Users are independent of each other, so these run
+  // concurrently below. Running them sequentially made a run take N × the
+  // per-user scan time (~90-150s each), which overruns the background-task
+  // budget long before the charter's 10-user target (§1.2.2.9) is reached.
+  const processUser = async (profile: { id: string }) => {
       try {
         // ── scan / scan_and_status only: find and score new jobs (Claude) ───────
         if (mode !== "status_only") {
@@ -154,7 +156,23 @@ Deno.serve(async (req) => {
       } catch (e: any) {
         console.error(`User ${profile.id} exception:`, e.message);
       }
-    }
+  };
+
+  // Bounded worker pool — parallel enough to finish a 10-user run well inside
+  // the background budget, capped so a larger user base can't stampede the
+  // Claude rate limit or the Gmail API quota.
+  const CONCURRENCY = 5;
+  const scanTask = (async () => {
+    let cursor = 0;
+    const workers = Array.from(
+      { length: Math.min(CONCURRENCY, profiles.length) },
+      async () => {
+        while (cursor < profiles.length) {
+          await processUser(profiles[cursor++]);
+        }
+      },
+    );
+    await Promise.all(workers);
   })();
 
   // Register as background work so it completes after response is sent

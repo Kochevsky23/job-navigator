@@ -95,8 +95,18 @@ Deno.serve(async (req) => {
       if (!claudeResp.ok) {
         throw new Error(claudeData?.error?.message || `PDF extraction failed (${claudeResp.status})`);
       }
-      text = claudeData.content?.[0]?.text?.trim() || "";
-      if (!text) throw new Error("PDF extraction returned no text");
+      // Find the text block rather than assuming content[0]: this model thinks by
+      // default, and a thinking block occupies content[0] when it does.
+      text = (claudeData.content ?? [])
+        .filter((b: any) => b?.type === "text")
+        .map((b: any) => b.text ?? "")
+        .join("\n")
+        .trim();
+      if (!text) {
+        throw new Error(
+          `PDF extraction returned no text (stop_reason=${claudeData?.stop_reason}, blocks=${(claudeData.content ?? []).map((b: any) => b?.type).join(",") || "none"})`
+        );
+      }
     } else {
       // Try plain text
       text = await file.text();
